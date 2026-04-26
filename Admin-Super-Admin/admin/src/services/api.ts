@@ -73,6 +73,51 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
+export interface Company {
+  _id: string;
+  name: string;
+  companyLogo?: string;
+  companyType?: string;
+}
+
+export interface CompanyRegistrationPayload {
+  name: string;
+  email: string;
+  companyType: string;
+  phoneNumber: {
+    countryCode: string;
+    dialNumber: string;
+  };
+  companyLogo?: string;
+  companyCategories?: string[];
+  tax?: {
+    taxType: string;
+    taxNumber: string;
+  };
+  billingAddress: {
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+  };
+  primaryContact: {
+    name: string;
+    email: string;
+    isSameAsBilling: boolean;
+    phoneNumber: {
+      countryCode: string;
+      dialNumber: string;
+    };
+    alternativePhone?: {
+      countryCode: string;
+      dialNumber: string;
+    };
+  };
+  password?: string;
+}
+
 export interface AdminRegistrationData {
   companyName: string;
   authorizedPerson: string;
@@ -86,13 +131,9 @@ export interface AdminRegistrationData {
 }
 
 export const adminApi = {
-  register: async (formData: FormData): Promise<ApiResponse> => {
+  register: async (payload: CompanyRegistrationPayload): Promise<ApiResponse> => {
     try {
-      const response = await api.post('/api/admin/register', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await adMobileApi.post('/v1/company', payload);
       return response.data;
     } catch (error: any) {
       if (error.response?.data) {
@@ -105,6 +146,18 @@ export const adminApi = {
   checkRegistrationStatus: async (email: string): Promise<ApiResponse> => {
     try {
       const response = await api.get(`/api/admin/status?email=${encodeURIComponent(email)}`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
+
+  getAllCompanies: async (): Promise<ApiResponse<Company[]>> => {
+    try {
+      const response = await adMobileApi.get('/v1/company/all/list');
       return response.data;
     } catch (error: any) {
       if (error.response?.data) {
