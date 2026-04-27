@@ -13,7 +13,7 @@ import com.mongodb.client.MongoDatabase;
 public class MongoConfig {
 	 @Bean
 	    public MongoDatabase mongoDatabase() {
-	       
-	      
+	       MongoClient mongoClient = MongoClients.create("mongodb+srv://sonu:sonu@cluster0.g1gd0ah.mongodb.net/?appName=Cluster0");
+	       return mongoClient.getDatabase("keliri");
 	    }
 }

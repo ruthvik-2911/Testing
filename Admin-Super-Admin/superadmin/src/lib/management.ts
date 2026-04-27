@@ -86,8 +86,8 @@ function authHeaders() {
   const session = getAuthSession()
   return session?.token
     ? {
-        Authorization: `Bearer ${session.token}`,
-      }
+      Authorization: `Bearer ${session.token}`,
+    }
     : undefined
 }
 
@@ -136,6 +136,18 @@ export async function runAdminAction(adminId: string, action: 'approve' | 'rejec
   })
 
   return handleJsonResponse<AdminActionResponse>(response, 'Unable to perform admin action')
+}
+
+export async function deleteAdmin(adminId: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/superadmin/admins/${adminId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  })
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { message?: string; error?: string } | null
+    throw new AuthError(payload?.message || payload?.error || 'Unable to delete admin', response.status)
+  }
 }
 
 export async function fetchAdminNotifications(): Promise<EmailNotificationRecord[]> {

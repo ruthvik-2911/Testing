@@ -111,6 +111,7 @@ export function getAuthSession(): AuthSession | null {
     }
 
     if (Date.now() >= session.expiresAt) {
+      localStorage.setItem('keliri_session_expired', 'true')
       clearAuthSession()
       return null
     }
@@ -231,8 +232,8 @@ export async function logoutSuperAdmin() {
       method: 'POST',
       headers: session?.token
         ? {
-            Authorization: `Bearer ${session.token}`,
-          }
+          Authorization: `Bearer ${session.token}`,
+        }
         : undefined,
     })
   } catch {

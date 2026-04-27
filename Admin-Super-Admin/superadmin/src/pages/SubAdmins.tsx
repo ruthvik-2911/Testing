@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ShieldPlus, Trash2, Lock, Unlock } from 'lucide-react'
 import PageHeader from '../components/shared/PageHeader'
 import StatusBadge from '../components/shared/StatusBadge'
+import DataTable from '../components/shared/DataTable'
 import {
   createSubAdmin,
   deleteSubAdmin,
@@ -106,6 +107,58 @@ export default function SubAdmins() {
     await load()
   }
 
+  const columns = [
+    {
+      key: 'name',
+      label: 'Account',
+      render: (_: any, row: SubAdminRecord) => (
+        <div>
+          <p className="font-semibold text-gray-900 text-sm">{row.name}</p>
+          <p className="text-xs text-gray-500">{row.email}</p>
+          <p className="text-xs text-gray-400">{row.phone}</p>
+        </div>
+      )
+    },
+    {
+      key: 'locked',
+      label: 'Status',
+      render: (locked: boolean) => <StatusBadge status={locked ? 'Suspended' : 'Active'} />
+    },
+    {
+      key: 'permissions',
+      label: 'Permissions',
+      render: (_: any, row: SubAdminRecord) => (
+        <div className="flex flex-wrap gap-1.5 max-w-[300px]">
+          {permissionOptions.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleQuickPermissionToggle(row, item.key); }}
+              className={`px-2 py-1 rounded text-[10px] font-semibold border ${row.permissions?.[item.key] ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      className: 'text-right',
+      render: (_: any, row: SubAdminRecord) => (
+        <div className="flex items-center justify-end gap-2">
+          <button onClick={(e) => { e.stopPropagation(); handleToggleLock(row); }} className="p-2 rounded hover:bg-gray-100 text-gray-600" title={row.locked ? 'Unlock' : 'Lock'}>
+            {row.locked ? <Unlock size={16} /> : <Lock size={16} />}
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); handleDelete(row); }} className="p-2 rounded hover:bg-red-50 text-red-600" title="Delete">
+            <Trash2 size={16} />
+          </button>
+        </div>
+      )
+    }
+  ]
+
   return (
     <div className="space-y-6 pb-8">
       <PageHeader
@@ -115,7 +168,7 @@ export default function SubAdmins() {
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-1 card-floating p-6">
+        <div className="xl:col-span-1 card-floating p-6 self-start">
           <div className="flex items-center gap-2 mb-4">
             <ShieldPlus size={18} className="text-primary-600" />
             <h3 className="font-bold text-gray-900">Create Sub-Admin</h3>
@@ -130,7 +183,7 @@ export default function SubAdmins() {
               <p className="text-xs font-semibold text-gray-500 mb-2">Module Permissions ({enabledCount} enabled)</p>
               <div className="grid grid-cols-2 gap-2">
                 {permissionOptions.map((item) => (
-                  <label key={item.key} className="flex items-center gap-2 text-xs text-gray-700">
+                  <label key={item.key} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={form.permissions[item.key]}
@@ -148,7 +201,7 @@ export default function SubAdmins() {
               </div>
             </div>
 
-            <button type="submit" disabled={saving} className="btn-primary w-full">
+            <button type="submit" disabled={saving} className="btn-primary w-full mt-2">
               {saving ? 'Creating...' : 'Create Sub-Admin'}
             </button>
           </form>
@@ -166,60 +219,13 @@ export default function SubAdmins() {
             </div>
           ) : null}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-xs text-gray-500 uppercase">Account</th>
-                  <th className="px-4 py-3 text-xs text-gray-500 uppercase">Status</th>
-                  <th className="px-4 py-3 text-xs text-gray-500 uppercase">Permissions</th>
-                  <th className="px-4 py-3 text-xs text-gray-500 uppercase text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {loading ? (
-                  <tr><td className="px-4 py-8 text-sm text-gray-500" colSpan={4}>Loading...</td></tr>
-                ) : subAdmins.length === 0 ? (
-                  <tr><td className="px-4 py-8 text-sm text-gray-500" colSpan={4}>No sub-admin accounts found.</td></tr>
-                ) : subAdmins.map((admin) => (
-                  <tr key={admin.id}>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-gray-900 text-sm">{admin.name}</p>
-                      <p className="text-xs text-gray-500">{admin.email}</p>
-                      <p className="text-xs text-gray-400">{admin.phone}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={admin.locked ? 'Suspended' : 'Active'} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1.5">
-                        {permissionOptions.map((item) => (
-                          <button
-                            key={item.key}
-                            type="button"
-                            onClick={() => handleQuickPermissionToggle(admin, item.key)}
-                            className={`px-2 py-1 rounded text-[10px] font-semibold border ${admin.permissions?.[item.key] ? 'bg-primary-50 text-primary-700 border-primary-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => handleToggleLock(admin)} className="p-2 rounded hover:bg-gray-100 text-gray-600" title={admin.locked ? 'Unlock' : 'Lock'}>
-                          {admin.locked ? <Unlock size={16} /> : <Lock size={16} />}
-                        </button>
-                        <button onClick={() => handleDelete(admin)} className="p-2 rounded hover:bg-red-50 text-red-600" title="Delete">
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <DataTable
+            columns={columns}
+            data={subAdmins}
+            isLoading={loading}
+            onRowClick={() => { }}
+            exportFileName="sub_admins_list"
+          />
         </div>
       </div>
     </div>

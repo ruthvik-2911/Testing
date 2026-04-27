@@ -7,5 +7,8 @@ import java.util.Optional;
 
 public interface SuperAdminRepository extends MongoRepository<SuperAdmin, String> {
     Optional<SuperAdmin> findByEmail(String email);
+
+    Optional<SuperAdmin> findByPhone(String phone);
+
     List<SuperAdmin> findByRole(String role);
 }

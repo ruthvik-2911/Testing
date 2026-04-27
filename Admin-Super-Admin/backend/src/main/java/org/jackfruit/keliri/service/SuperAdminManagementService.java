@@ -67,15 +67,16 @@ public class SuperAdminManagementService {
 
     public List<SuperAdminManagementResponse.AdminRecord> getAdmins(String search, String status) {
         List<SuperAdminManagementResponse.AdminRecord> admins = new ArrayList<>();
-        
+
         // 1. Get real admins (Active/Suspended)
         admins.addAll(usersRepository.findbygivendor().stream()
                 .map(this::toAdminRecord)
                 .toList());
-        
+
         // 2. Get pending/rejected registrations
         admins.addAll(registrationRepository.findAll().stream()
-                .filter(reg -> !"APPROVED".equals(reg.getStatus())) // Approved registrations already have a users record
+                .filter(reg -> !"APPROVED".equals(reg.getStatus())) // Approved registrations already have a users
+                                                                    // record
                 .map(this::registrationToAdminRecord)
                 .toList());
 
@@ -97,7 +98,8 @@ public class SuperAdminManagementService {
             SuperAdminManagementResponse.AdminRecord base = toAdminRecord(admin);
             copyAdmin(base, detail);
 
-            List<SuperAdminManagementResponse.PublisherRecord> linkedPublishers = getPublishers(null, null, null, null).stream()
+            List<SuperAdminManagementResponse.PublisherRecord> linkedPublishers = getPublishers(null, null, null, null)
+                    .stream()
                     .filter(publisher -> adminId.equals(publisher.getAdminId()))
                     .toList();
 
@@ -129,7 +131,7 @@ public class SuperAdminManagementService {
         detail.setDocuments(new ArrayList<>());
         detail.setPublishers(new ArrayList<>());
         detail.setPerformance(new SuperAdminManagementResponse.PerformanceSummary());
-        
+
         return detail;
     }
 
@@ -156,7 +158,7 @@ public class SuperAdminManagementService {
         // Create the user account
         users user = usersRepository.findByEmailAddress(registration.getEmailId())
                 .orElse(new users());
-        
+
         user.setEmailAddress(registration.getEmailId());
         user.setFullName(registration.getAuthorizedPerson());
         user.setCompanyName(registration.getCompanyName());
@@ -164,10 +166,10 @@ public class SuperAdminManagementService {
         user.setGivendor(1);
         user.setUserType("ADMIN");
         user.setAccountStatus("ACTIVE");
-        
+
         usersRepository.save(user);
 
-        return applyAdminAction(adminId, "Active", null, "Admin registration approved", 
+        return applyAdminAction(adminId, "Active", null, "Admin registration approved",
                 "Approval confirmation + access details delivered.", "Approval");
     }
 
@@ -209,9 +211,39 @@ public class SuperAdminManagementService {
         return applyAdminAction(adminId, "Active", null, null, null, "Account");
     }
 
+    public void deleteAdmin(String adminId) {
+        // Try finding in active users
+        users user = usersRepository.findById(adminId).orElse(null);
+        if (user != null) {
+            System.out.println("Deleting Admin User: " + user.getEmailAddress() + " (ID: " + adminId + ")");
+            usersRepository.delete(user);
+
+            // Also cleanup registration if it exists for this email
+            registrationRepository.findByEmailId(user.getEmailAddress()).ifPresent(reg -> {
+                System.out.println("Cleaning up registration for: " + user.getEmailAddress());
+                registrationRepository.delete(reg);
+            });
+
+            addAuditLog("Super Admin", "Super Admin", "Account Deletion", "User", adminId,
+                    "Permanently deleted admin account", "192.168.1.20");
+            return;
+        }
+
+        // Try finding in registrations only
+        org.jackfruit.keliri.model.AdminRegistration reg = registrationRepository.findById(adminId)
+                .orElseThrow(
+                        () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin or Registration not found"));
+
+        System.out.println("Deleting Registration: " + reg.getEmailId() + " (ID: " + adminId + ")");
+        registrationRepository.delete(reg);
+        addAuditLog("Super Admin", "Super Admin", "Registration Deletion", "Registration", adminId,
+                "Permanently deleted pending registration", "192.168.1.20");
+    }
+
     public List<SuperAdminManagementResponse.EmailNotificationRecord> getEmailNotifications() {
         return emailNotifications.stream()
-                .sorted(Comparator.comparing(SuperAdminManagementResponse.EmailNotificationRecord::getTimestamp).reversed())
+                .sorted(Comparator.comparing(SuperAdminManagementResponse.EmailNotificationRecord::getTimestamp)
+                        .reversed())
                 .limit(20)
                 .toList();
     }
@@ -251,18 +283,18 @@ public class SuperAdminManagementService {
             record.setImpressions(impressions);
             record.setClicks(clicks);
             record.setEngagement(engagement);
-            
+
             // Allow status override from new publisher DB, fallback to campaign logic
             if (publisher.getStatus() != null && "INACTIVE".equalsIgnoreCase(publisher.getStatus())) {
                 record.setStatus("Inactive");
             } else {
                 record.setStatus(resolvePublisherStatus(publisherCampaigns));
             }
-            
+
             record.setEmail(defaultString(publisher.getEmail(), "not-available@keliri.com"));
             record.setPhone(defaultString(publisher.getMobile(), "N/A"));
-            record.setJoinDate(publisher.getCreatedAt() != null 
-                    ? publisher.getCreatedAt().atZone(ZONE_ID).toLocalDate().format(DATE_FORMATTER) 
+            record.setJoinDate(publisher.getCreatedAt() != null
+                    ? publisher.getCreatedAt().atZone(ZONE_ID).toLocalDate().format(DATE_FORMATTER)
                     : resolveDateFromObjectId(publisher.getId()));
             records.add(record);
         }
@@ -284,7 +316,7 @@ public class SuperAdminManagementService {
                 .toList();
 
         Map<String, advertisements> adsById = advertisementsRepository.findDashboardAdsByIds(
-                        campaigns.stream().map(ad_campaigns::getAdvertisementId).filter(Objects::nonNull).distinct().toList())
+                campaigns.stream().map(ad_campaigns::getAdvertisementId).filter(Objects::nonNull).distinct().toList())
                 .stream().collect(Collectors.toMap(advertisements::getId, ad -> ad));
 
         SuperAdminManagementResponse.PublisherDetail detail = new SuperAdminManagementResponse.PublisherDetail();
@@ -307,24 +339,27 @@ public class SuperAdminManagementService {
         usersRepository.findAll().forEach(user -> usersById.put(user.getId(), user));
         usersRepository.findbygivendor().forEach(user -> usersById.put(user.getId(), user));
 
-        Map<String, SuperAdminManagementResponse.PublisherRecord> firstPublisherByAdminId = getPublishers(null, null, null, null).stream()
+        Map<String, SuperAdminManagementResponse.PublisherRecord> firstPublisherByAdminId = getPublishers(null, null,
+                null, null).stream()
                 .collect(Collectors.toMap(
                         SuperAdminManagementResponse.PublisherRecord::getAdminId,
                         publisher -> publisher,
                         (left, right) -> left));
 
         Map<String, advertisements> adsById = advertisementsRepository.findDashboardAdsByIds(
-                        campaignsRepository.findAll().stream()
-                                .map(ad_campaigns::getAdvertisementId)
-                                .filter(Objects::nonNull)
-                                .distinct()
-                                .toList())
+                campaignsRepository.findAll().stream()
+                        .map(ad_campaigns::getAdvertisementId)
+                        .filter(Objects::nonNull)
+                        .distinct()
+                        .toList())
                 .stream()
                 .collect(Collectors.toMap(advertisements::getId, ad -> ad));
 
         return campaignsRepository.findAll().stream()
-                .map(campaign -> toAdvertisementRecord(campaign, adsById.get(campaign.getAdvertisementId()), usersById, firstPublisherByAdminId))
-                .sorted(Comparator.comparing(SuperAdminManagementResponse.AdvertisementRecord::getCreatedDate).reversed())
+                .map(campaign -> toAdvertisementRecord(campaign, adsById.get(campaign.getAdvertisementId()), usersById,
+                        firstPublisherByAdminId))
+                .sorted(Comparator.comparing(SuperAdminManagementResponse.AdvertisementRecord::getCreatedDate)
+                        .reversed())
                 .toList();
     }
 
@@ -347,7 +382,8 @@ public class SuperAdminManagementService {
         Map<String, users> usersById = new HashMap<>();
         usersRepository.findAll().forEach(user -> usersById.put(user.getId(), user));
         usersRepository.findbygivendor().forEach(user -> usersById.put(user.getId(), user));
-        Map<String, SuperAdminManagementResponse.PublisherRecord> firstPublisherByAdminId = getPublishers(null, null, null, null).stream()
+        Map<String, SuperAdminManagementResponse.PublisherRecord> firstPublisherByAdminId = getPublishers(null, null,
+                null, null).stream()
                 .collect(Collectors.toMap(
                         SuperAdminManagementResponse.PublisherRecord::getAdminId,
                         publisher -> publisher,
@@ -364,7 +400,8 @@ public class SuperAdminManagementService {
             String entityType,
             String fromDate,
             String toDate) {
-        // List<SuperAdminManagementResponse.AuditLogRecord> generated = buildGeneratedAuditLogs();
+        // List<SuperAdminManagementResponse.AuditLogRecord> generated =
+        // buildGeneratedAuditLogs();
         List<SuperAdminManagementResponse.AuditLogRecord> allLogs = new ArrayList<>();
         // allLogs.addAll(generated);
         allLogs.addAll(actionAuditLogs);
@@ -438,7 +475,8 @@ public class SuperAdminManagementService {
         return List.of(gst, company);
     }
 
-    private SuperAdminManagementResponse.AdminRecord registrationToAdminRecord(org.jackfruit.keliri.model.AdminRegistration reg) {
+    private SuperAdminManagementResponse.AdminRecord registrationToAdminRecord(
+            org.jackfruit.keliri.model.AdminRegistration reg) {
         SuperAdminManagementResponse.AdminRecord record = new SuperAdminManagementResponse.AdminRecord();
         record.setId(reg.getId());
         record.setName(reg.getAuthorizedPerson());
@@ -450,10 +488,14 @@ public class SuperAdminManagementService {
         return record;
     }
 
-    private SuperAdminManagementResponse.PerformanceSummary buildPerformance(List<SuperAdminManagementResponse.PublisherRecord> linkedPublishers) {
-        long totalAds = linkedPublishers.stream().mapToLong(SuperAdminManagementResponse.PublisherRecord::getAdsPosted).sum();
-        long totalImpressions = linkedPublishers.stream().mapToLong(SuperAdminManagementResponse.PublisherRecord::getImpressions).sum();
-        long totalClicks = linkedPublishers.stream().mapToLong(SuperAdminManagementResponse.PublisherRecord::getClicks).sum();
+    private SuperAdminManagementResponse.PerformanceSummary buildPerformance(
+            List<SuperAdminManagementResponse.PublisherRecord> linkedPublishers) {
+        long totalAds = linkedPublishers.stream().mapToLong(SuperAdminManagementResponse.PublisherRecord::getAdsPosted)
+                .sum();
+        long totalImpressions = linkedPublishers.stream()
+                .mapToLong(SuperAdminManagementResponse.PublisherRecord::getImpressions).sum();
+        long totalClicks = linkedPublishers.stream().mapToLong(SuperAdminManagementResponse.PublisherRecord::getClicks)
+                .sum();
 
         SuperAdminManagementResponse.PerformanceSummary performance = new SuperAdminManagementResponse.PerformanceSummary();
         performance.setTotalAds(totalAds);
@@ -625,14 +667,15 @@ public class SuperAdminManagementService {
         }
     }
 
-
     private String resolvePublisherStatus(List<ad_campaigns> campaigns) {
         if (campaigns.isEmpty()) {
             return "Inactive";
         }
 
-        boolean hasActive = campaigns.stream().anyMatch(campaign -> "ACTIVE".equalsIgnoreCase(campaign.getCompaignsStatus()));
-        boolean hasPaused = campaigns.stream().anyMatch(campaign -> "SUSPENDED".equalsIgnoreCase(campaign.getCompaignsStatus()));
+        boolean hasActive = campaigns.stream()
+                .anyMatch(campaign -> "ACTIVE".equalsIgnoreCase(campaign.getCompaignsStatus()));
+        boolean hasPaused = campaigns.stream()
+                .anyMatch(campaign -> "SUSPENDED".equalsIgnoreCase(campaign.getCompaignsStatus()));
 
         if (hasPaused && !hasActive) {
             return "Suspended";
@@ -689,7 +732,8 @@ public class SuperAdminManagementService {
         if (publisher.getLastKnownLocation() != null) {
             txn_user_locations location = locationsById.get(publisher.getLastKnownLocation());
             if (location != null && location.getLocation() != null) {
-                return String.format(Locale.ENGLISH, "%.4f, %.4f", location.getLocation().getY(), location.getLocation().getX());
+                return String.format(Locale.ENGLISH, "%.4f, %.4f", location.getLocation().getY(),
+                        location.getLocation().getX());
             }
         }
 
@@ -709,7 +753,8 @@ public class SuperAdminManagementService {
             return campaign.getLocation().getLocationName();
         }
 
-        return String.format(Locale.ENGLISH, "%.4f, %.4f", campaign.getLocation().getLat(), campaign.getLocation().getLng());
+        return String.format(Locale.ENGLISH, "%.4f, %.4f", campaign.getLocation().getLat(),
+                campaign.getLocation().getLng());
     }
 
     private String resolveCampaignRadius(ad_campaigns campaign) {
@@ -722,7 +767,8 @@ public class SuperAdminManagementService {
 
     private String resolveStartDate(ad_campaigns campaign) {
         if (campaign.getDateRange() != null && campaign.getDateRange().getFromDate() != null) {
-            return campaign.getDateRange().getFromDate().toInstant().atZone(ZONE_ID).toLocalDate().format(DATE_FORMATTER);
+            return campaign.getDateRange().getFromDate().toInstant().atZone(ZONE_ID).toLocalDate()
+                    .format(DATE_FORMATTER);
         }
 
         return resolveDateFromObjectId(campaign.getId());
@@ -745,14 +791,16 @@ public class SuperAdminManagementService {
             return ad.getThumbnail();
         }
 
-        if (ad.getContent() != null && ad.getContent().getBanners() != null && !ad.getContent().getBanners().isEmpty()) {
+        if (ad.getContent() != null && ad.getContent().getBanners() != null
+                && !ad.getContent().getBanners().isEmpty()) {
             String banner = ad.getContent().getBanners().get(0);
             if (banner != null && !banner.isBlank()) {
                 return banner;
             }
         }
 
-        if (ad.getContent() != null && ad.getContent().getVideoLink() != null && !ad.getContent().getVideoLink().isBlank()) {
+        if (ad.getContent() != null && ad.getContent().getVideoLink() != null
+                && !ad.getContent().getVideoLink().isBlank()) {
             return ad.getContent().getVideoLink();
         }
 
@@ -856,7 +904,8 @@ public class SuperAdminManagementService {
         return value.substring(value.length() - 6);
     }
 
-    private void copyAdmin(SuperAdminManagementResponse.AdminRecord source, SuperAdminManagementResponse.AdminDetail target) {
+    private void copyAdmin(SuperAdminManagementResponse.AdminRecord source,
+            SuperAdminManagementResponse.AdminDetail target) {
         target.setId(source.getId());
         target.setName(source.getName());
         target.setEmail(source.getEmail());
@@ -866,7 +915,8 @@ public class SuperAdminManagementService {
         target.setPhone(source.getPhone());
     }
 
-    private void copyPublisher(SuperAdminManagementResponse.PublisherRecord source, SuperAdminManagementResponse.PublisherDetail target) {
+    private void copyPublisher(SuperAdminManagementResponse.PublisherRecord source,
+            SuperAdminManagementResponse.PublisherDetail target) {
         target.setId(source.getId());
         target.setName(source.getName());
         target.setAdminId(source.getAdminId());

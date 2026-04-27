@@ -12,6 +12,9 @@ import AdvertisementMonitoring from './pages/AdvertisementMonitoring'
 import Analytics from './pages/Analytics'
 import Tickets from './pages/Tickets'
 import SubAdmins from './pages/SubAdmins'
+import SetupPassword from './pages/SetupPassword'
+import UnlockAccount from './pages/UnlockAccount'
+import ResetPassword from './pages/ResetPassword'
 import DashboardLayout from './components/layout/DashboardLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import PermissionRoute from './components/auth/PermissionRoute'
@@ -21,6 +24,9 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Login />} />
+        <Route path="/setup-password" element={<SetupPassword />} />
+        <Route path="/unlock-account" element={<UnlockAccount />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route element={<ProtectedRoute />}>
           <Route element={<DashboardLayout />}>

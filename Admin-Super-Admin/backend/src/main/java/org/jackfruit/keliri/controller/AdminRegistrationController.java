@@ -21,7 +21,8 @@ public class AdminRegistrationController {
     private final FileStorageService fileStorageService;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    public AdminRegistrationController(AdminRegistrationRepository registrationRepository, FileStorageService fileStorageService) {
+    public AdminRegistrationController(AdminRegistrationRepository registrationRepository,
+            FileStorageService fileStorageService) {
         this.registrationRepository = registrationRepository;
         this.fileStorageService = fileStorageService;
     }
@@ -37,11 +38,11 @@ public class AdminRegistrationController {
             @RequestParam("password") String password,
             @RequestParam(value = "gstCertificate", required = false) MultipartFile gstCertificate,
             @RequestParam("companyRegistrationDoc") MultipartFile companyRegistrationDoc,
-            @RequestParam("idProof") MultipartFile idProof
-    ) {
+            @RequestParam("idProof") MultipartFile idProof) {
         try {
             if (registrationRepository.findByEmailId(emailId).isPresent()) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("message", "Registration with this email already exists"));
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("message", "Registration with this email already exists"));
             }
 
             AdminRegistration registration = new AdminRegistration();
@@ -57,17 +58,19 @@ public class AdminRegistrationController {
 
             // Upload files to S3
             String idSuffix = emailId.replaceAll("[^a-zA-Z0-9]", "_");
-            
+
             if (gstCertificate != null && !gstCertificate.isEmpty()) {
                 registration.setGstCertificateUrl(fileStorageService.uploadFile(gstCertificate, idSuffix + "/gst"));
             }
-            
-            registration.setCompanyRegistrationDocUrl(fileStorageService.uploadFile(companyRegistrationDoc, idSuffix + "/company"));
+
+            registration.setCompanyRegistrationDocUrl(
+                    fileStorageService.uploadFile(companyRegistrationDoc, idSuffix + "/company"));
             registration.setIdProofUrl(fileStorageService.uploadFile(idProof, idSuffix + "/id"));
 
             registrationRepository.save(registration);
 
-            return ResponseEntity.ok(Map.of("success", true, "message", "Registration submitted successfully. Awaiting approval."));
+            return ResponseEntity
+                    .ok(Map.of("success", true, "message", "Registration submitted successfully. Awaiting approval."));
         } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -87,8 +90,29 @@ public class AdminRegistrationController {
                         "status", reg.getStatus(),
                         "companyName", reg.getCompanyName(),
                         "submittedAt", reg.getSubmittedAt(),
-                        "rejectionReason", reg.getRejectionReason() != null ? reg.getRejectionReason() : ""
-                )))
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No registration found for this email"));
+                        "rejectionReason", reg.getRejectionReason() != null ? reg.getRejectionReason() : "")))
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "No registration found for this email"));
+    }
+
+    /**
+     * Returns the S3 document URLs for a given registration (by ID).
+     * Used by Super Admin to preview/download submitted documents.
+     */
+    @GetMapping("/{id}/documents")
+    public ResponseEntity<?> getDocuments(@PathVariable String id) {
+        return registrationRepository.findById(id)
+                .map(reg -> {
+                    java.util.Map<String, Object> docs = new java.util.LinkedHashMap<>();
+                    docs.put("registrationId", reg.getId());
+                    docs.put("companyName", reg.getCompanyName());
+                    docs.put("emailId", reg.getEmailId());
+                    docs.put("gstCertificateUrl", reg.getGstCertificateUrl() != null ? reg.getGstCertificateUrl() : "");
+                    docs.put("companyRegistrationDocUrl",
+                            reg.getCompanyRegistrationDocUrl() != null ? reg.getCompanyRegistrationDocUrl() : "");
+                    docs.put("idProofUrl", reg.getIdProofUrl() != null ? reg.getIdProofUrl() : "");
+                    return ResponseEntity.ok(docs);
+                })
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
     }
 }

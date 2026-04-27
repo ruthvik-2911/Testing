@@ -79,25 +79,25 @@ import javax.imageio.ImageIO;
 	@Service
 	public class S3Service {
 
-		 @Value("${aws.accessKey}")
+		 @Value("${aws.accessKey:}")
 		    private String accessKey;
 
-		    @Value("${aws.secretKey}")
+		    @Value("${aws.secretKey:}")
 		    private String secretKey;
 
-		    @Value("${aws.region}")
+		    @Value("${aws.region:ap-south-1}")
 		    private String region;
 
-		    @Value("${aws.s3.bucketName}")
+		    @Value("${aws.s3.bucketName:keliri-uploads}")
 		    private String bucketName;
 
-		    @Value("${aws.s3.endpointUrl}")
+	    @Value("${aws.s3.endpointUrl:}")
 		    private String endpointUrl;
 
-		    @Value("${aws.s3.folder}")
+		    @Value("${aws.s3.folder:uploads}")
 		    private String uploadFolder;
 
-		    @Value("${aws.s3.thumbnailFolder}")
+		    @Value("${aws.s3.thumbnailFolder:thumbnails}")
 		    private String thumbnailFolder;
 
 		    private S3Client getS3Client() {
