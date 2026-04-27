@@ -16,17 +16,22 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import org.bson.types.ObjectId;
+import org.jackfruit.keliri.model.PaymentTransaction;
 import org.jackfruit.keliri.model.SuperAdminManagementResponse;
 import org.jackfruit.keliri.model.ad_campaigns;
 import org.jackfruit.keliri.model.advertisements;
 import org.jackfruit.keliri.model.txn_user_locations;
 import org.jackfruit.keliri.model.users;
+import org.jackfruit.keliri.repository.PaymentTransactionRepository;
 import org.jackfruit.keliri.repository.ad_campaignsRepository;
 import org.jackfruit.keliri.repository.advertisementsRepository;
 import org.jackfruit.keliri.repository.hitRecordRepository;
 import org.jackfruit.keliri.repository.txn_user_locationsRepository;
 import org.jackfruit.keliri.repository.usersRepository;
 import org.jackfruit.keliri.repository.PublisherRepository;
+import com.razorpay.Payment;
+import com.razorpay.RazorpayClient;
+import com.razorpay.RazorpayException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
@@ -43,10 +48,14 @@ public class SuperAdminManagementService {
     private final hitRecordRepository hitRecordRepository;
     private final org.jackfruit.keliri.repository.AdminRegistrationRepository registrationRepository;
     private final PublisherRepository publisherRepository;
+    private final PaymentTransactionRepository paymentTransactionRepository;
+    private final RazorpayClient razorpayClient;
     private final org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder passwordEncoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
 
     private final List<SuperAdminManagementResponse.EmailNotificationRecord> emailNotifications = new CopyOnWriteArrayList<>();
     private final List<SuperAdminManagementResponse.AuditLogRecord> actionAuditLogs = new CopyOnWriteArrayList<>();
+
+    private final MobilizeApiService mobilizeApiService;
 
     public SuperAdminManagementService(
             usersRepository usersRepository,
@@ -55,7 +64,10 @@ public class SuperAdminManagementService {
             txn_user_locationsRepository locationsRepository,
             hitRecordRepository hitRecordRepository,
             org.jackfruit.keliri.repository.AdminRegistrationRepository registrationRepository,
-            PublisherRepository publisherRepository) {
+            PublisherRepository publisherRepository,
+            PaymentTransactionRepository paymentTransactionRepository,
+            RazorpayClient razorpayClient,
+            MobilizeApiService mobilizeApiService) {
         this.usersRepository = usersRepository;
         this.campaignsRepository = campaignsRepository;
         this.advertisementsRepository = advertisementsRepository;
@@ -63,22 +75,39 @@ public class SuperAdminManagementService {
         this.hitRecordRepository = hitRecordRepository;
         this.registrationRepository = registrationRepository;
         this.publisherRepository = publisherRepository;
+        this.paymentTransactionRepository = paymentTransactionRepository;
+        this.razorpayClient = razorpayClient;
+        this.mobilizeApiService = mobilizeApiService;
     }
 
     public List<SuperAdminManagementResponse.AdminRecord> getAdmins(String search, String status) {
         List<SuperAdminManagementResponse.AdminRecord> admins = new ArrayList<>();
 
-        // 1. Get real admins (Active/Suspended)
-        admins.addAll(usersRepository.findbygivendor().stream()
+        // 1. Get real admins (Active/Suspended) from local DB
+        List<SuperAdminManagementResponse.AdminRecord> activeAdmins = usersRepository.findbygivendor().stream()
                 .map(this::toAdminRecord)
-                .toList());
+                .toList();
+        admins.addAll(activeAdmins);
 
-        // 2. Get pending/rejected registrations
-        admins.addAll(registrationRepository.findAll().stream()
-                .filter(reg -> !"APPROVED".equals(reg.getStatus())) // Approved registrations already have a users
-                                                                    // record
-                .map(this::registrationToAdminRecord)
-                .toList());
+        // 2. Get pending/rejected registrations from Mobilize DB directly (to avoid API
+        // filtering)
+        List<Map> allCompanies = mobilizeApiService.fetchAllCompaniesDirectly();
+        for (Map company : allCompanies) {
+            String email = (String) company.get("email");
+            if (activeAdmins.stream().anyMatch(a -> Objects.equals(a.getEmail(), email)))
+                continue;
+
+            admins.add(mobilizeCompanyToAdminRecord((Map<String, Object>) company));
+        }
+
+        // 3. Get registrations from admin_registrations collection
+        List<org.jackfruit.keliri.model.AdminRegistration> regs = registrationRepository.findAll();
+        for (org.jackfruit.keliri.model.AdminRegistration reg : regs) {
+            if (admins.stream().anyMatch(a -> Objects.equals(a.getEmail(), reg.getEmailId())))
+                continue;
+
+            admins.add(toAdminRecordFromReg(reg));
+        }
 
         return admins.stream()
                 .filter(admin -> matchesAdminFilters(admin, search, status))
@@ -87,7 +116,7 @@ public class SuperAdminManagementService {
     }
 
     public SuperAdminManagementResponse.AdminDetail getAdminDetail(String adminId) {
-        // Try finding in active users
+        // Try finding in local active users first
         users admin = usersRepository.findbygivendor().stream()
                 .filter(user -> Objects.equals(user.getId(), adminId))
                 .findFirst()
@@ -118,59 +147,96 @@ public class SuperAdminManagementService {
             return detail;
         }
 
-        // Try finding in registrations
-        org.jackfruit.keliri.model.AdminRegistration reg = registrationRepository.findById(adminId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin/Registration not found"));
+        // Try finding in Admin Registrations
+        org.jackfruit.keliri.model.AdminRegistration reg = registrationRepository.findById(adminId).orElse(null);
+        if (reg != null) {
+            SuperAdminManagementResponse.AdminDetail detail = new SuperAdminManagementResponse.AdminDetail();
+            SuperAdminManagementResponse.AdminRecord base = toAdminRecordFromReg(reg);
+            copyAdmin(base, detail);
+
+            detail.setPublishers(new ArrayList<>());
+            detail.setDocuments(new ArrayList<>()); // Would normally fetch S3 docs here
+            detail.setPerformance(new SuperAdminManagementResponse.PerformanceSummary());
+            return detail;
+        }
+
+        // Try finding in Mobilize DB (Pending companies)
+        Map<String, Object> company = (Map<String, Object>) (Map) mobilizeApiService.fetchAllCompaniesDirectly()
+                .stream()
+                .filter(c -> Objects.equals(String.valueOf(c.get("uid")), adminId)
+                        || Objects.equals(String.valueOf(c.get("_id")), adminId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Admin/Registration not found in Unified DB"));
 
         SuperAdminManagementResponse.AdminDetail detail = new SuperAdminManagementResponse.AdminDetail();
-        SuperAdminManagementResponse.AdminRecord base = registrationToAdminRecord(reg);
+        SuperAdminManagementResponse.AdminRecord base = mobilizeCompanyToAdminRecord(company);
         copyAdmin(base, detail);
-        detail.setPhone(reg.getMobileNumber()); // Ensure phone is set
 
-        // Documents are hidden for now (mocked) to avoid S3 link errors
-        detail.setDocuments(new ArrayList<>());
+        // Documents from Mobilize are currently limited to companyLogo
+        List<SuperAdminManagementResponse.DocumentItem> docs = new ArrayList<>();
+        if (company.get("companyLogo") != null) {
+            docs.add(newDocument("Company Logo", "Logo", company.get("companyLogo").toString()));
+        }
+
+        detail.setDocuments(docs);
         detail.setPublishers(new ArrayList<>());
         detail.setPerformance(new SuperAdminManagementResponse.PerformanceSummary());
 
         return detail;
     }
 
-    private SuperAdminManagementResponse.DocumentItem newDocument(String name, String type, String url) {
-        SuperAdminManagementResponse.DocumentItem doc = new SuperAdminManagementResponse.DocumentItem();
-        doc.setName(name);
-        doc.setType(type);
-        doc.setUrl(url);
-        return doc;
-    }
-
     public SuperAdminManagementResponse.AdminActionResponse approveAdmin(String adminId) {
-        org.jackfruit.keliri.model.AdminRegistration registration = registrationRepository.findById(adminId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
+        // 1. Try finding in Admin Registrations first
+        org.jackfruit.keliri.model.AdminRegistration reg = registrationRepository.findById(adminId).orElse(null);
+        if (reg != null) {
+            // Create the active admin user in the local system
+            org.jackfruit.keliri.model.users newUser = new org.jackfruit.keliri.model.users();
+            newUser.setFullName(reg.getAuthorizedPerson());
+            newUser.setEmailAddress(reg.getEmailId());
+            newUser.setPassword(reg.getPassword()); // Already encrypted
+            newUser.setCompanyName(reg.getCompanyName());
+            newUser.setUserType("ADMIN");
+            newUser.setAccountStatus("ACTIVE");
+            newUser.setGivendor(1);
+            newUser.setLatitude(0);
+            newUser.setLongitude(0);
 
-        if (!"PENDING".equals(registration.getStatus())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Only pending registrations can be approved");
+            usersRepository.save(newUser);
+
+            // Mark registration as approved
+            reg.setStatus("APPROVED");
+            reg.setProcessedAt(Instant.now());
+            registrationRepository.save(reg);
+
+            // We could also delete it, but keeping it as APPROVED is better for auditing.
+            // registrationRepository.delete(reg);
+
+            return applyAdminAction(adminId, "Active", null, "Admin registration approved locally",
+                    "Your registration has been approved. You can now login as an Admin.", "Approval");
         }
 
-        registration.setStatus("APPROVED");
-        registration.setProcessedAt(Instant.now());
-        registrationRepository.save(registration);
+        // 2. Find company in Mobilize DB directly (Unified Discovery)
+        Map<String, Object> company = (Map<String, Object>) (Map) mobilizeApiService.fetchAllCompaniesDirectly()
+                .stream()
+                .filter(c -> Objects.equals(String.valueOf(c.get("uid")), adminId)
+                        || Objects.equals(String.valueOf(c.get("_id")), adminId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Company registration not found in Unified Mobilize DB"));
 
-        // Create the user account
-        users user = usersRepository.findByEmailAddress(registration.getEmailId())
-                .orElse(new users());
+        String uid = (String) company.get("uid");
+        if (uid == null)
+            uid = adminId;
 
-        user.setEmailAddress(registration.getEmailId());
-        user.setFullName(registration.getAuthorizedPerson());
-        user.setCompanyName(registration.getCompanyName());
-        user.setPassword(registration.getPassword()); // Already hashed in registration controller
-        user.setGivendor(1);
-        user.setUserType("ADMIN");
-        user.setAccountStatus("ACTIVE");
-
-        usersRepository.save(user);
+        boolean success = mobilizeApiService.approveCompany(uid);
+        if (!success) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to approve company in Mobilize API");
+        }
 
         return applyAdminAction(adminId, "Active", null, "Admin registration approved",
-                "Approval confirmation + access details delivered.", "Approval");
+                "Your company registration has been approved. You can now login to the portal.", "Approval");
     }
 
     public SuperAdminManagementResponse.AdminActionResponse rejectAdmin(String adminId, String reason) {
@@ -178,13 +244,9 @@ public class SuperAdminManagementService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reason is mandatory for rejection");
         }
 
-        org.jackfruit.keliri.model.AdminRegistration registration = registrationRepository.findById(adminId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Registration not found"));
-
-        registration.setStatus("REJECTED");
-        registration.setRejectionReason(reason);
-        registration.setProcessedAt(Instant.now());
-        registrationRepository.save(registration);
+        // For rejection, we currently keep it as status: false in Mobilize,
+        // but we can add a 'rejectionReason' field if we modify the model further.
+        // For now, we'll just log the action and notify.
 
         return applyAdminAction(
                 adminId,
@@ -413,6 +475,99 @@ public class SuperAdminManagementService {
                 .filter(log -> matchesAuditFilters(log, search, actionType, actorRole, entityType, from, to))
                 .sorted(Comparator.comparing(SuperAdminManagementResponse.AuditLogRecord::getTimestamp).reversed())
                 .toList();
+    }
+
+    public List<SuperAdminManagementResponse.TransactionRecord> getTransactions() {
+        List<SuperAdminManagementResponse.TransactionRecord> records = new ArrayList<>();
+
+        // 1. Fetch from Local Database
+        List<PaymentTransaction> localTxns = paymentTransactionRepository.findAll();
+        Map<String, String> adminNames = getAdmins(null, null).stream()
+                .collect(Collectors.toMap(SuperAdminManagementResponse.AdminRecord::getId,
+                        SuperAdminManagementResponse.AdminRecord::getName, (a, b) -> a));
+
+        for (PaymentTransaction txn : localTxns) {
+            SuperAdminManagementResponse.TransactionRecord record = new SuperAdminManagementResponse.TransactionRecord();
+            record.setId("LXN-" + shortId(txn.getId()));
+            record.setDate(txn.getCreatedAt().toString());
+            record.setAdminId(txn.getAdminId());
+            record.setAdminName(adminNames.getOrDefault(txn.getAdminId(), "Admin"));
+            record.setReference(
+                    txn.getRazorpayPaymentId() != null ? txn.getRazorpayPaymentId() : txn.getRazorpayOrderId());
+            record.setAmount(txn.getAmount());
+            record.setStatus(normalizeStatus(txn.getStatus()));
+            record.setIncoming(true);
+            records.add(record);
+        }
+
+        // 2. Fetch from Razorpay API (for full history/sync)
+        try {
+            org.json.JSONObject fetchOptions = new org.json.JSONObject();
+            fetchOptions.put("count", 100);
+            List<Payment> payments = razorpayClient.payments.fetchAll(fetchOptions);
+            for (Payment payment : payments) {
+                String paymentId = payment.get("id");
+                // Avoid duplicates by checking if paymentId is already in records
+                if (records.stream().anyMatch(r -> paymentId.equals(r.getReference()))) {
+                    continue;
+                }
+
+                SuperAdminManagementResponse.TransactionRecord record = new SuperAdminManagementResponse.TransactionRecord();
+                record.setId("RXN-" + paymentId.substring(Math.max(0, paymentId.length() - 8)));
+
+                // Razorpay created_at can be Integer (epoch seconds) or Date depending on SDK
+                // version
+                try {
+                    Object createdAtRaw = payment.get("created_at");
+                    Instant createdInstant;
+                    if (createdAtRaw instanceof java.util.Date) {
+                        createdInstant = ((java.util.Date) createdAtRaw).toInstant();
+                    } else {
+                        long epochSeconds = Long.parseLong(createdAtRaw.toString());
+                        createdInstant = Instant.ofEpochSecond(epochSeconds);
+                    }
+                    record.setDate(createdInstant.toString());
+                } catch (Exception e) {
+                    record.setDate(Instant.now().toString());
+                }
+
+                record.setAdminId("RAZORPAY");
+                record.setAdminName("External");
+                record.setReference(paymentId);
+
+                // amount is in paise, convert to rupees
+                try {
+                    Object amountRaw = payment.get("amount");
+                    double amount = Double.parseDouble(amountRaw.toString()) / 100.0;
+                    record.setAmount(amount);
+                } catch (Exception e) {
+                    record.setAmount(0);
+                }
+
+                try {
+                    String status = payment.get("status").toString();
+                    record.setStatus(status.substring(0, 1).toUpperCase() + status.substring(1).toLowerCase());
+                } catch (Exception e) {
+                    record.setStatus("Unknown");
+                }
+                record.setIncoming(true);
+                records.add(record);
+            }
+        } catch (RazorpayException e) {
+            System.err.println("Failed to fetch Razorpay payments: " + e.getMessage());
+        }
+
+        return records.stream()
+                .sorted(Comparator.comparing(SuperAdminManagementResponse.TransactionRecord::getDate).reversed())
+                .toList();
+    }
+
+    private String normalizeStatus(String status) {
+        if ("SUCCESS".equalsIgnoreCase(status))
+            return "Completed";
+        if ("FAILED".equalsIgnoreCase(status))
+            return "Failed";
+        return "Pending";
     }
 
     private SuperAdminManagementResponse.AdminActionResponse applyAdminAction(
@@ -891,6 +1046,87 @@ public class SuperAdminManagementService {
 
     private double roundToTwoDecimals(double value) {
         return Math.round(value * 100.0) / 100.0;
+    }
+
+    private SuperAdminManagementResponse.DocumentItem newDocument(String name, String type, String url) {
+        SuperAdminManagementResponse.DocumentItem doc = new SuperAdminManagementResponse.DocumentItem();
+        doc.setName(name);
+        doc.setType(type);
+        doc.setUrl(url);
+        return doc;
+    }
+
+    private SuperAdminManagementResponse.AdminRecord toAdminRecordFromReg(
+            org.jackfruit.keliri.model.AdminRegistration reg) {
+        SuperAdminManagementResponse.AdminRecord record = new SuperAdminManagementResponse.AdminRecord();
+        record.setId(reg.getId());
+        record.setName(reg.getAuthorizedPerson());
+        record.setEmail(reg.getEmailId());
+        record.setCompany(reg.getCompanyName());
+        record.setPhone(reg.getMobileNumber());
+
+        String regStatus = reg.getStatus();
+        if ("APPROVED".equalsIgnoreCase(regStatus))
+            record.setStatus("Active");
+        else if ("REJECTED".equalsIgnoreCase(regStatus))
+            record.setStatus("Rejected");
+        else
+            record.setStatus("Pending");
+
+        if (reg.getSubmittedAt() != null) {
+            record.setRegisteredDate(reg.getSubmittedAt().atZone(ZONE_ID).toLocalDate().format(DATE_FORMATTER));
+        } else {
+            record.setRegisteredDate(LocalDate.now().format(DATE_FORMATTER));
+        }
+        return record;
+    }
+
+    private SuperAdminManagementResponse.AdminRecord mobilizeCompanyToAdminRecord(Map<String, Object> company) {
+        SuperAdminManagementResponse.AdminRecord record = new SuperAdminManagementResponse.AdminRecord();
+
+        String id = (String) company.get("_id");
+        if (id == null)
+            id = (String) company.get("uid");
+        record.setId(id);
+
+        Map primaryContact = (Map) company.get("primaryContact");
+        if (primaryContact != null && primaryContact.get("name") != null) {
+            record.setName(primaryContact.get("name").toString());
+        } else {
+            record.setName((String) company.get("name"));
+        }
+
+        record.setEmail((String) company.get("email"));
+        record.setCompany((String) company.get("name"));
+
+        Object createdAt = company.get("createdAt");
+        if (createdAt != null) {
+            try {
+                String dateStr = createdAt.toString();
+                record.setRegisteredDate(dateStr.contains("T") ? dateStr.substring(0, 10) : dateStr);
+            } catch (Exception e) {
+                record.setRegisteredDate(LocalDate.now().format(DATE_FORMATTER));
+            }
+        } else {
+            record.setRegisteredDate(LocalDate.now().format(DATE_FORMATTER));
+        }
+
+        Object statusObj = company.get("status");
+        boolean isActive = statusObj instanceof Boolean ? (Boolean) statusObj
+                : Boolean.parseBoolean(statusObj.toString());
+        record.setStatus(isActive ? "Active" : "Pending");
+
+        if (primaryContact != null && primaryContact.get("phoneNumber") != null) {
+            Map phone = (Map) primaryContact.get("phoneNumber");
+            if (phone.get("dialNumber") != null)
+                record.setPhone(phone.get("dialNumber").toString());
+        } else if (company.get("phoneNumber") != null) {
+            Map phone = (Map) company.get("phoneNumber");
+            if (phone.get("dialNumber") != null)
+                record.setPhone(phone.get("dialNumber").toString());
+        }
+
+        return record;
     }
 
     private String defaultString(String value, String fallback) {

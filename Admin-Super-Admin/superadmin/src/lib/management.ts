@@ -158,26 +158,88 @@ export async function fetchAdminNotifications(): Promise<EmailNotificationRecord
   return handleJsonResponse<EmailNotificationRecord[]>(response, 'Unable to fetch notifications')
 }
 
+export const AD_MOBILE_API_URL = import.meta.env.VITE_AD_MOBILE_BACKEND_URL ?? 'http://ec2-15-206-186-192.ap-south-1.compute.amazonaws.com:3000'
+export const AD_MOBILE_TOKEN = import.meta.env.VITE_AD_MOBILE_TOKEN ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI2NGZiMTE3YS1mNTMwLTRmOTgtYTVkMy0yMWY3ZmVlYzkwNDciLCJfaWQiOiI2NGVkODZkMjMyMDBlMWQ2YzUyMDYwYmMiLCJpYXQiOjE3NzY5MTQ0MzksImV4cCI6MTgwODQ1MDQzOX0.jYRhILMRhluttAgns-OGDgGdji0DKhok6QBcUB7qdPg'
+
+function mobileHeaders() {
+  return {
+    'Authorization': `Bearer ${AD_MOBILE_TOKEN}`,
+    'Content-Type': 'application/json'
+  }
+}
+
 export async function fetchPublishers(params?: { adminId?: string; status?: string; location?: string; search?: string }): Promise<PublisherRecord[]> {
-  const query = new URLSearchParams()
-  if (params?.adminId) query.set('adminId', params.adminId)
-  if (params?.status) query.set('status', params.status)
-  if (params?.location) query.set('location', params.location)
-  if (params?.search) query.set('search', params.search)
+  // Attempt to fetch from PRODUCTS_SERVICES first, fallback to all/list
+  let response = await fetch(`${AD_MOBILE_API_URL}/v1/company/PRODUCTS_SERVICES?all=yes`, {
+    headers: mobileHeaders()
+  }).catch(() => null)
+  let payload = await response?.json().catch(() => null)
 
-  const response = await fetch(`${API_BASE_URL}/api/superadmin/publishers?${query.toString()}`, {
-    headers: authHeaders(),
-  })
+  if (!response?.ok || !payload || !payload.data || payload.data.length === 0) {
+    console.warn("PRODUCTS_SERVICES failed or empty, trying /v1/company/all/list")
+    response = await fetch(`${AD_MOBILE_API_URL}/v1/company/all/list`, {
+      headers: mobileHeaders()
+    }).catch(() => null)
+    payload = await response?.json().catch(() => null)
+  }
 
-  return handleJsonResponse<PublisherRecord[]>(response, 'Unable to fetch publishers')
+  if (!response?.ok || !payload) {
+    console.error("Could not fetch Publishers from any Mobile API endpoint.")
+    return []
+  }
+
+  const rawCompanies = payload.data || (Array.isArray(payload) ? payload : [])
+
+  return rawCompanies.map((c: any) => ({
+    id: c.uid || c.id || c._id,
+    name: c.name || "Unknown Publisher",
+    adminId: "N/A",
+    adminName: "Automated",
+    location: c.billingAddress?.addressLine1 || (typeof c.location === 'string' ? c.location : c.location?.locationName) || "Unknown",
+    adsPosted: 0,
+    impressions: 0,
+    clicks: 0,
+    engagement: 0,
+    status: c.status === 'INACTIVE' ? 'Suspended' : 'Active',
+    email: c.email || c.primaryContact?.email || "N/A",
+    phone: c.phoneNumber?.dialNumber || c.mobile || "N/A",
+    joinDate: new Date(c.createdAt || Date.now()).toLocaleDateString()
+  }))
 }
 
 export async function fetchPublisherDetail(publisherId: string): Promise<PublisherDetail> {
-  const response = await fetch(`${API_BASE_URL}/api/superadmin/publishers/${publisherId}`, {
-    headers: authHeaders(),
+  const response = await fetch(`${AD_MOBILE_API_URL}/v1/company/all/list`, {
+    headers: mobileHeaders()
   })
+  const payload = await response.json().catch(() => null)
+  const rawCompanies = payload?.data || (Array.isArray(payload) ? payload : [])
 
-  return handleJsonResponse<PublisherDetail>(response, 'Unable to fetch publisher details')
+  const c = rawCompanies.find((comp: any) => (comp.uid || comp.id || comp._id) === publisherId)
+
+  if (!c) {
+    throw new AuthError('Publisher not found in live database', 404)
+  }
+
+  const baseRecord: PublisherRecord = {
+    id: c.uid || c.id || c._id,
+    name: c.name || "Unknown",
+    adminId: "N/A",
+    adminName: "Automated",
+    location: c.billingAddress?.addressLine1 || c.location || "Unknown",
+    adsPosted: 0,
+    impressions: 0,
+    clicks: 0,
+    engagement: 0,
+    status: c.status === 'INACTIVE' ? 'Suspended' : 'Active',
+    email: c.email || "N/A",
+    phone: c.phoneNumber?.dialNumber || "N/A",
+    joinDate: new Date(c.createdAt || Date.now()).toLocaleDateString()
+  }
+
+  return {
+    ...baseRecord,
+    ads: []
+  }
 }
 
 export async function fetchAuditLogs(params?: {

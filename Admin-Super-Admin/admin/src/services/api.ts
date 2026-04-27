@@ -37,11 +37,11 @@ adMobileApi.interceptors.request.use(
   (config) => {
     // The Ad Mobile backend uses a different JWT than the Spring Boot admin backend.
     // We prioritize a dedicated token (from env or localStorage) if available.
-    const token = 
-      import.meta.env.VITE_AD_MOBILE_TOKEN || 
-      localStorage.getItem('ad_mobile_token') || 
+    const token =
+      import.meta.env.VITE_AD_MOBILE_TOKEN ||
+      localStorage.getItem('ad_mobile_token') ||
       localStorage.getItem('admin_token');
-      
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -131,9 +131,13 @@ export interface AdminRegistrationData {
 }
 
 export const adminApi = {
-  register: async (payload: CompanyRegistrationPayload): Promise<ApiResponse> => {
+  register: async (payload: FormData): Promise<ApiResponse> => {
     try {
-      const response = await adMobileApi.post('/v1/company', payload);
+      const response = await api.post('/api/admin/register', payload, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       return response.data;
     } catch (error: any) {
       if (error.response?.data) {
@@ -142,7 +146,7 @@ export const adminApi = {
       throw error;
     }
   },
-  
+
   checkRegistrationStatus: async (email: string): Promise<ApiResponse> => {
     try {
       const response = await api.get(`/api/admin/status?email=${encodeURIComponent(email)}`);

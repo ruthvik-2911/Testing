@@ -1,7 +1,6 @@
 import { api } from './api'
-import type { RazorpayOrder } from "../../types/payment"
-import type { PaymentTransaction } from "../../types/payment"
-import type { Invoice } from "../../types/invoice"
+import type { RazorpayOrder } from "../types/payment"
+import type { Invoice } from "../types/invoice"
 
 export const createOrder = async (adId: string, amount: number): Promise<RazorpayOrder> => {
   const response = await api.post('/api/admin/payments/create-order', {
@@ -90,6 +89,10 @@ export const getInvoiceById = async (transactionId: string): Promise<Invoice> =>
   const rzpTxnId = txn?.razorpayPaymentId || txn?.razorpayOrderId || transactionId;
   const statusStr = txn?.status === 'SUCCESS' ? 'Paid' : (txn?.status === 'FAILED' ? 'Failed' : 'Pending');
 
+  // Dynamic user data from session
+  const adminUserStr = localStorage.getItem('admin_user');
+  const adminUser = adminUserStr ? JSON.parse(adminUserStr) : null;
+
   return {
     invoiceNumber: `INV-${rzpTxnId.slice(-6).toUpperCase()}`,
     date: txn ? new Date(txn.createdAt).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
@@ -105,10 +108,10 @@ export const getInvoiceById = async (transactionId: string): Promise<Invoice> =>
     },
 
     to: {
-      company: "Keliri Admin Account",
-      address: "Admin Virtual Terminal",
-      email: "admin@keliri.com",
-      mobile: "+91 99999 00000"
+      company: adminUser?.companyName || adminUser?.name || "Keliri Admin Account",
+      address: adminUser?.companyAddress || adminUser?.address || "Admin Virtual Terminal",
+      email: adminUser?.email || "admin@keliri.com",
+      mobile: adminUser?.phoneNumber || adminUser?.mobileNumber || "+91 00000 00000"
     },
 
     items: [

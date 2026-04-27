@@ -13,6 +13,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.Instant;
 import java.util.Map;
 
+@CrossOrigin(originPatterns = "*", maxAge = 3600, allowCredentials = "true")
 @RestController
 @RequestMapping("/api/admin")
 public class AdminRegistrationController {
@@ -72,10 +73,12 @@ public class AdminRegistrationController {
             return ResponseEntity
                     .ok(Map.of("success", true, "message", "Registration submitted successfully. Awaiting approval."));
         } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
+            System.err.println("[AdminRegistrationController] S3 Error: " + e.awsErrorDetails().errorMessage());
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "AWS S3 Error: " + e.awsErrorDetails().errorMessage()));
         } catch (Exception e) {
+            System.err.println("[AdminRegistrationController] General Error: " + e.getMessage());
             e.printStackTrace();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("message", "Error submitting registration: " + e.getMessage()));

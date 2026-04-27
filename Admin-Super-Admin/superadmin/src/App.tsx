@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { Toaster } from 'react-hot-toast'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Revenue from './pages/Revenue'
@@ -15,6 +16,7 @@ import SubAdmins from './pages/SubAdmins'
 import SetupPassword from './pages/SetupPassword'
 import UnlockAccount from './pages/UnlockAccount'
 import ResetPassword from './pages/ResetPassword'
+import InvoicePage from './pages/InvoicePage'
 import DashboardLayout from './components/layout/DashboardLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import PermissionRoute from './components/auth/PermissionRoute'
@@ -22,6 +24,7 @@ import PermissionRoute from './components/auth/PermissionRoute'
 function App() {
   return (
     <BrowserRouter>
+      <Toaster position="top-right" toastOptions={{ duration: 3000 }} />
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/setup-password" element={<SetupPassword />} />
@@ -50,6 +53,7 @@ function App() {
             </Route>
             <Route element={<PermissionRoute permission="transactions" />}>
               <Route path="/transactions" element={<Transactions />} />
+              <Route path="/invoice/:id" element={<InvoicePage />} />
             </Route>
             <Route element={<PermissionRoute permission="tickets" />}>
               <Route path="/tickets" element={<Tickets />} />

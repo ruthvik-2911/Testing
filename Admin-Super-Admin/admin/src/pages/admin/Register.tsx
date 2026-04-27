@@ -73,75 +73,51 @@ export default function AdminRegister() {
       return;
     }
 
-    // Since the new endpoint is JSON based, file uploads won't be sent in this request directly,
-    // unless there is a separate upload endpoint that provides an ObjectId.
-    // I'll skip the file validation block that prevents submission for now, as JSON doesn't accept files.
-    // However, I will warn if they aren't uploaded just to be safe.
-    if (!companyDocFile || !idProofFile) {
-      toast.error('Please upload all required documents (will be processed separately in future)');
+    if (registrationMode === 'new' && (!companyDocFile || !idProofFile)) {
+      toast.error('Please upload all required documents');
+      return;
     }
 
-    if (showGstCertificate && !gstCertFile) {
+    if (registrationMode === 'new' && showGstCertificate && !gstCertFile) {
       toast.error('Please upload your GST certificate');
+      return;
     }
 
     setIsSubmitting(true);
     try {
       let payload: any;
-      
+
       if (registrationMode === 'new') {
-        payload = {
-          name: data.companyName,
-          email: data.emailId,
-          companyType: data.companyType || 'PRODUCTS_SERVICES',
-          phoneNumber: {
-            countryCode: data.countryCode || '+91',
-            dialNumber: data.mobileNumber
-          },
-          tax: showGstCertificate && data.gstNumber ? {
-            taxType: 'GST',
-            taxNumber: data.gstNumber
-          } : undefined,
-          billingAddress: {
-            addressLine1: data.businessAddress,
-            addressLine2: data.addressLine2 || '',
-            city: data.city,
-            state: data.state,
-            zipCode: data.zipCode,
-            country: data.country || 'India'
-          },
-          primaryContact: {
-            name: data.authorizedPerson,
-            email: data.emailId,
-            isSameAsBilling: true,
-            phoneNumber: {
-              countryCode: data.countryCode || '+91',
-              dialNumber: data.mobileNumber
-            }
-          },
-          password: data.password // Pass it along just in case the backend uses it for user creation
-        };
+        const formData = new FormData();
+        formData.append('companyName', data.companyName);
+        formData.append('authorizedPerson', data.authorizedPerson);
+        formData.append('businessAddress', data.businessAddress);
+        if (showGstCertificate && data.gstNumber) {
+          formData.append('gstNumber', data.gstNumber);
+        }
+        formData.append('mobileNumber', data.mobileNumber);
+        formData.append('emailId', data.emailId);
+        formData.append('password', data.password);
+
+        if (showGstCertificate && gstCertFile) formData.append('gstCertificate', gstCertFile);
+        if (companyDocFile) formData.append('companyRegistrationDoc', companyDocFile);
+        if (idProofFile) formData.append('idProof', idProofFile);
+
+        payload = formData;
       } else {
         if (!selectedCompanyId) {
           toast.error('Please select an existing company');
           setIsSubmitting(false);
           return;
         }
-        
-        payload = {
-          companyId: selectedCompanyId,
-          email: data.emailId,
-          name: data.authorizedPerson,
-          phoneNumber: {
-            countryCode: data.countryCode || '+91',
-            dialNumber: data.mobileNumber
-          },
-          password: data.password
-        };
+
+        toast.error('Joining existing companies via multipart upload is not currently configured.');
+        setIsSubmitting(false);
+        return;
       }
 
       const response = await adminApi.register(payload);
-      
+
       if (response.success) {
         toast.success(response.message || 'Registration successful');
         localStorage.setItem('registrationEmail', data.emailId);
@@ -284,22 +260,20 @@ export default function AdminRegister() {
               <button
                 type="button"
                 onClick={() => setRegistrationMode('new')}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-                  registrationMode === 'new'
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${registrationMode === 'new'
                     ? 'bg-white dark:bg-[#2C313C] text-brand-600 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
+                  }`}
               >
                 Register New Company
               </button>
               <button
                 type="button"
                 onClick={() => setRegistrationMode('existing')}
-                className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-                  registrationMode === 'existing'
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${registrationMode === 'existing'
                     ? 'bg-white dark:bg-[#2C313C] text-brand-600 shadow-sm'
                     : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
+                  }`}
               >
                 Join Existing Company
               </button>
@@ -311,215 +285,213 @@ export default function AdminRegister() {
                 <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-5 pb-3 border-b border-gray-100 dark:border-gray-800">
                   Select Company
                 </h3>
-               {isLoadingCompanies ? (
-                 <div className="flex items-center gap-2 text-sm text-gray-500 p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-[#1C1F26]">
-                   <Loader2 className="w-4 h-4 animate-spin text-brand-500" /> Loading companies...
-                 </div>
-               ) : (
-                 <div className="space-y-2 max-h-60 overflow-y-auto pr-2 border border-gray-200 dark:border-gray-800 rounded-xl p-2 bg-gray-50 dark:bg-[#1C1F26]">
-                   {companies.length === 0 ? (
-                     <div className="p-4 text-sm text-center text-gray-500">No companies found.</div>
-                   ) : (
-                     companies.map((company) => (
-                       <div 
-                         key={company._id}
-                         onClick={() => setSelectedCompanyId(company._id)}
-                         className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${
-                           selectedCompanyId === company._id 
-                             ? 'bg-brand-50 border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 border' 
-                             : 'hover:bg-gray-100 dark:hover:bg-[#2C313C] border border-transparent'
-                         }`}
-                       >
-                         {company.companyLogo ? (
-                           <img src={company.companyLogo} alt={company.name} className="w-10 h-10 rounded-lg object-cover bg-white" />
-                         ) : (
-                           <div className="w-10 h-10 rounded-lg bg-brand-100 dark:bg-brand-900 flex items-center justify-center text-brand-600 font-bold text-lg">
-                             {company.name.charAt(0)}
-                           </div>
-                         )}
-                         <div className="flex-1">
-                           <h4 className="font-semibold text-gray-900 dark:text-white text-sm">{company.name}</h4>
-                           {company.companyType && <p className="text-xs text-gray-500 uppercase">{company.companyType.replace('_', ' ')}</p>}
-                         </div>
-                         <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                           selectedCompanyId === company._id ? 'border-brand-500 bg-brand-500' : 'border-gray-300 dark:border-gray-600'
-                         }`}>
-                           {selectedCompanyId === company._id && <div className="w-2 h-2 bg-white rounded-full" />}
-                         </div>
-                       </div>
-                     ))
-                   )}
-                 </div>
-               )}
+                {isLoadingCompanies ? (
+                  <div className="flex items-center gap-2 text-sm text-gray-500 p-4 border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-[#1C1F26]">
+                    <Loader2 className="w-4 h-4 animate-spin text-brand-500" /> Loading companies...
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-60 overflow-y-auto pr-2 border border-gray-200 dark:border-gray-800 rounded-xl p-2 bg-gray-50 dark:bg-[#1C1F26]">
+                    {companies.length === 0 ? (
+                      <div className="p-4 text-sm text-center text-gray-500">No companies found.</div>
+                    ) : (
+                      companies.map((company) => (
+                        <div
+                          key={company._id}
+                          onClick={() => setSelectedCompanyId(company._id)}
+                          className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${selectedCompanyId === company._id
+                              ? 'bg-brand-50 border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 border'
+                              : 'hover:bg-gray-100 dark:hover:bg-[#2C313C] border border-transparent'
+                            }`}
+                        >
+                          {company.companyLogo ? (
+                            <img src={company.companyLogo} alt={company.name} className="w-10 h-10 rounded-lg object-cover bg-white" />
+                          ) : (
+                            <div className="w-10 h-10 rounded-lg bg-brand-100 dark:bg-brand-900 flex items-center justify-center text-brand-600 font-bold text-lg">
+                              {company.name.charAt(0)}
+                            </div>
+                          )}
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 dark:text-white text-sm">{company.name}</h4>
+                            {company.companyType && <p className="text-xs text-gray-500 uppercase">{company.companyType.replace('_', ' ')}</p>}
+                          </div>
+                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${selectedCompanyId === company._id ? 'border-brand-500 bg-brand-500' : 'border-gray-300 dark:border-gray-600'
+                            }`}>
+                            {selectedCompanyId === company._id && <div className="w-2 h-2 bg-white rounded-full" />}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             {/* ── Company Information ── */}
             {registrationMode === 'new' && (
-            <div>
-              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-5 pb-3 border-b border-gray-100 dark:border-gray-800">
-                Company Information
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div>
+                <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 dark:text-gray-500 mb-5 pb-3 border-b border-gray-100 dark:border-gray-800">
+                  Company Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
-                {/* Company Name */}
-                <div>
-                  <label className={labelClass}>Company Name <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                      <Building2 className="w-[18px] h-[18px]" />
-                    </div>
-                    <input
-                      {...register('companyName', { required: 'Company name is required' })}
-                      type="text"
-                      placeholder="Your company name"
-                      className={inputClass}
-                    />
-                  </div>
-                  {errors.companyName && <p className={errorClass}>{errors.companyName.message as string}</p>}
-                </div>
-
-                {/* Company Type */}
-                <div>
-                  <label className={labelClass}>Company Type <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                      <Building2 className="w-[18px] h-[18px]" />
-                    </div>
-                    <select
-                      {...register('companyType', { required: 'Company type is required' })}
-                      className={`${inputClass} appearance-none`}
-                    >
-                      <option value="">Select Type</option>
-                      <option value="PRODUCTS_SERVICES">Products & Services</option>
-                      <option value="PUBLISHER">Publisher</option>
-                    </select>
-                  </div>
-                  {errors.companyType && <p className={errorClass}>{errors.companyType.message as string}</p>}
-                </div>
-
-                {/* Authorized Person */}
-                <div>
-                  <label className={labelClass}>Authorized Person Name <span className="text-red-500">*</span></label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                      <User className="w-[18px] h-[18px]" />
-                    </div>
-                    <input
-                      {...register('authorizedPerson', { required: 'Authorized person name is required' })}
-                      type="text"
-                      placeholder="Full name"
-                      className={inputClass}
-                    />
-                  </div>
-                  {errors.authorizedPerson && <p className={errorClass}>{errors.authorizedPerson.message as string}</p>}
-                </div>
-
-                {/* Business Address - full width */}
-                <div className="md:col-span-2">
-                  <label className={labelClass}>Business Address <span className="text-red-500">*</span></label>
-                  <div className="grid gap-3">
+                  {/* Company Name */}
+                  <div>
+                    <label className={labelClass}>Company Name <span className="text-red-500">*</span></label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <MapPinned className="w-[18px] h-[18px]" />
+                        <Building2 className="w-[18px] h-[18px]" />
                       </div>
                       <input
-                        {...register('businessAddress', { required: 'Address Line 1 is required' })}
+                        {...register('companyName', { required: 'Company name is required' })}
                         type="text"
-                        placeholder="Address Line 1"
+                        placeholder="Your company name"
                         className={inputClass}
                       />
                     </div>
-                    {errors.businessAddress && <p className={errorClass}>{errors.businessAddress.message as string}</p>}
-                    
+                    {errors.companyName && <p className={errorClass}>{errors.companyName.message as string}</p>}
+                  </div>
+
+                  {/* Company Type */}
+                  <div>
+                    <label className={labelClass}>Company Type <span className="text-red-500">*</span></label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <MapPinned className="w-[18px] h-[18px]" />
+                        <Building2 className="w-[18px] h-[18px]" />
+                      </div>
+                      <select
+                        {...register('companyType', { required: 'Company type is required' })}
+                        className={`${inputClass} appearance-none`}
+                      >
+                        <option value="">Select Type</option>
+                        <option value="PRODUCTS_SERVICES">Products & Services</option>
+                        <option value="PUBLISHER">Publisher</option>
+                      </select>
+                    </div>
+                    {errors.companyType && <p className={errorClass}>{errors.companyType.message as string}</p>}
+                  </div>
+
+                  {/* Authorized Person */}
+                  <div>
+                    <label className={labelClass}>Authorized Person Name <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                        <User className="w-[18px] h-[18px]" />
                       </div>
                       <input
-                        {...register('addressLine2')}
+                        {...register('authorizedPerson', { required: 'Authorized person name is required' })}
                         type="text"
-                        placeholder="Address Line 2 (Optional)"
+                        placeholder="Full name"
                         className={inputClass}
                       />
                     </div>
+                    {errors.authorizedPerson && <p className={errorClass}>{errors.authorizedPerson.message as string}</p>}
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
+                  {/* Business Address - full width */}
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>Business Address <span className="text-red-500">*</span></label>
+                    <div className="grid gap-3">
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                          <MapPinned className="w-[18px] h-[18px]" />
+                        </div>
                         <input
-                          {...register('city', { required: 'City is required' })}
+                          {...register('businessAddress', { required: 'Address Line 1 is required' })}
                           type="text"
-                          placeholder="City"
-                          className={`${inputClass} px-4`}
+                          placeholder="Address Line 1"
+                          className={inputClass}
                         />
-                        {errors.city && <p className={errorClass}>{errors.city.message as string}</p>}
                       </div>
-                      <div>
-                        <input
-                          {...register('state', { required: 'State is required' })}
-                          type="text"
-                          placeholder="State"
-                          className={`${inputClass} px-4`}
-                        />
-                        {errors.state && <p className={errorClass}>{errors.state.message as string}</p>}
-                      </div>
-                    </div>
+                      {errors.businessAddress && <p className={errorClass}>{errors.businessAddress.message as string}</p>}
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                          <MapPinned className="w-[18px] h-[18px]" />
+                        </div>
                         <input
-                          {...register('zipCode', { required: 'Zip Code is required' })}
+                          {...register('addressLine2')}
                           type="text"
-                          placeholder="Zip/Postal Code"
-                          className={`${inputClass} px-4`}
+                          placeholder="Address Line 2 (Optional)"
+                          className={inputClass}
                         />
-                        {errors.zipCode && <p className={errorClass}>{errors.zipCode.message as string}</p>}
                       </div>
-                      <div>
-                        <input
-                          {...register('country', { required: 'Country is required' })}
-                          type="text"
-                          defaultValue="India"
-                          placeholder="Country"
-                          className={`${inputClass} px-4`}
-                        />
-                        {errors.country && <p className={errorClass}>{errors.country.message as string}</p>}
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <input
+                            {...register('city', { required: 'City is required' })}
+                            type="text"
+                            placeholder="City"
+                            className={`${inputClass} px-4`}
+                          />
+                          {errors.city && <p className={errorClass}>{errors.city.message as string}</p>}
+                        </div>
+                        <div>
+                          <input
+                            {...register('state', { required: 'State is required' })}
+                            type="text"
+                            placeholder="State"
+                            className={`${inputClass} px-4`}
+                          />
+                          {errors.state && <p className={errorClass}>{errors.state.message as string}</p>}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <input
+                            {...register('zipCode', { required: 'Zip Code is required' })}
+                            type="text"
+                            placeholder="Zip/Postal Code"
+                            className={`${inputClass} px-4`}
+                          />
+                          {errors.zipCode && <p className={errorClass}>{errors.zipCode.message as string}</p>}
+                        </div>
+                        <div>
+                          <input
+                            {...register('country', { required: 'Country is required' })}
+                            type="text"
+                            defaultValue="India"
+                            placeholder="Country"
+                            className={`${inputClass} px-4`}
+                          />
+                          {errors.country && <p className={errorClass}>{errors.country.message as string}</p>}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* GST Number */}
-                <div className={showGstCertificate ? '' : 'md:col-span-2'}>
-                  <label className={labelClass}>GST Number <span className="text-gray-400 font-normal text-xs">(Optional)</span></label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                      <FileText className="w-[18px] h-[18px]" />
+                  {/* GST Number */}
+                  <div className={showGstCertificate ? '' : 'md:col-span-2'}>
+                    <label className={labelClass}>GST Number <span className="text-gray-400 font-normal text-xs">(Optional)</span></label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                        <FileText className="w-[18px] h-[18px]" />
+                      </div>
+                      <input
+                        {...register('gstNumber')}
+                        type="text"
+                        placeholder="e.g. 27AAPCS1234C1ZV"
+                        className={inputClass}
+                      />
                     </div>
-                    <input
-                      {...register('gstNumber')}
-                      type="text"
-                      placeholder="e.g. 27AAPCS1234C1ZV"
-                      className={inputClass}
-                    />
+                    <p className="text-xs text-gray-400 mt-1">GST certificate upload will appear if you enter a number</p>
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">GST certificate upload will appear if you enter a number</p>
-                </div>
 
-                {/* GST Certificate Upload (conditional) */}
-                {showGstCertificate && (
-                  <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-                    <FileDropZone
-                      label="GST Certificate"
-                      file={gstCertFile}
-                      onChange={setGstCertFile}
-                      required={showGstCertificate}
-                      hint="PDF, JPG, PNG — max 5MB"
-                    />
-                  </motion.div>
-                )}
+                  {/* GST Certificate Upload (conditional) */}
+                  {showGstCertificate && (
+                    <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+                      <FileDropZone
+                        label="GST Certificate"
+                        file={gstCertFile}
+                        onChange={setGstCertFile}
+                        required={showGstCertificate}
+                        hint="PDF, JPG, PNG — max 5MB"
+                      />
+                    </motion.div>
+                  )}
+                </div>
               </div>
-            </div>
             )}
 
             {/* ── Contact Information ── */}

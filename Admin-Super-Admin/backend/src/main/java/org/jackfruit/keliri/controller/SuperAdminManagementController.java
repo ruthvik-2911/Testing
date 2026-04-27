@@ -106,4 +106,9 @@ public class SuperAdminManagementController {
         return ResponseEntity
                 .ok(managementService.getAuditLogs(search, actionType, actorRole, entityType, fromDate, toDate));
     }
+
+    @GetMapping("/payments")
+    public ResponseEntity<List<SuperAdminManagementResponse.TransactionRecord>> getTransactions() {
+        return ResponseEntity.ok(managementService.getTransactions());
+    }
 }

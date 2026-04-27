@@ -480,42 +480,149 @@ public class SuperAdminManagementResponse {
         private String radius;
         private String image;
 
-        public String getId() { return id; }
-        public void setId(String id) { this.id = id; }
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public String getType() { return type; }
-        public void setType(String type) { this.type = type; }
-        public String getAdminId() { return adminId; }
-        public void setAdminId(String adminId) { this.adminId = adminId; }
-        public String getAdminName() { return adminName; }
-        public void setAdminName(String adminName) { this.adminName = adminName; }
-        public String getPublisherId() { return publisherId; }
-        public void setPublisherId(String publisherId) { this.publisherId = publisherId; }
-        public String getPublisherName() { return publisherName; }
-        public void setPublisherName(String publisherName) { this.publisherName = publisherName; }
-        public String getCreatedDate() { return createdDate; }
-        public void setCreatedDate(String createdDate) { this.createdDate = createdDate; }
-        public String getStatus() { return status; }
-        public void setStatus(String status) { this.status = status; }
-        public Long getImpressions() { return impressions; }
-        public void setImpressions(Long impressions) { this.impressions = impressions; }
-        public Long getClicks() { return clicks; }
-        public void setClicks(Long clicks) { this.clicks = clicks; }
-        public Double getCtr() { return ctr; }
-        public void setCtr(Double ctr) { this.ctr = ctr; }
-        public String getStartDate() { return startDate; }
-        public void setStartDate(String startDate) { this.startDate = startDate; }
-        public String getEndDate() { return endDate; }
-        public void setEndDate(String endDate) { this.endDate = endDate; }
-        public String getLocation() { return location; }
-        public void setLocation(String location) { this.location = location; }
-        public String getRadius() { return radius; }
-        public void setRadius(String radius) { this.radius = radius; }
-        public String getImage() { return image; }
-        public void setImage(String image) { this.image = image; }
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public void setDescription(String description) {
+            this.description = description;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getAdminId() {
+            return adminId;
+        }
+
+        public void setAdminId(String adminId) {
+            this.adminId = adminId;
+        }
+
+        public String getAdminName() {
+            return adminName;
+        }
+
+        public void setAdminName(String adminName) {
+            this.adminName = adminName;
+        }
+
+        public String getPublisherId() {
+            return publisherId;
+        }
+
+        public void setPublisherId(String publisherId) {
+            this.publisherId = publisherId;
+        }
+
+        public String getPublisherName() {
+            return publisherName;
+        }
+
+        public void setPublisherName(String publisherName) {
+            this.publisherName = publisherName;
+        }
+
+        public String getCreatedDate() {
+            return createdDate;
+        }
+
+        public void setCreatedDate(String createdDate) {
+            this.createdDate = createdDate;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public Long getImpressions() {
+            return impressions;
+        }
+
+        public void setImpressions(Long impressions) {
+            this.impressions = impressions;
+        }
+
+        public Long getClicks() {
+            return clicks;
+        }
+
+        public void setClicks(Long clicks) {
+            this.clicks = clicks;
+        }
+
+        public Double getCtr() {
+            return ctr;
+        }
+
+        public void setCtr(Double ctr) {
+            this.ctr = ctr;
+        }
+
+        public String getStartDate() {
+            return startDate;
+        }
+
+        public void setStartDate(String startDate) {
+            this.startDate = startDate;
+        }
+
+        public String getEndDate() {
+            return endDate;
+        }
+
+        public void setEndDate(String endDate) {
+            this.endDate = endDate;
+        }
+
+        public String getLocation() {
+            return location;
+        }
+
+        public void setLocation(String location) {
+            this.location = location;
+        }
+
+        public String getRadius() {
+            return radius;
+        }
+
+        public void setRadius(String radius) {
+            this.radius = radius;
+        }
+
+        public String getImage() {
+            return image;
+        }
+
+        public void setImage(String image) {
+            this.image = image;
+        }
     }
 
     public static class AuditLogRecord {
@@ -599,6 +706,81 @@ public class SuperAdminManagementResponse {
 
         public void setIp(String ip) {
             this.ip = ip;
+        }
+    }
+
+    public static class TransactionRecord {
+        private String id;
+        private String date;
+        private String adminId;
+        private String adminName;
+        private String reference;
+        private double amount;
+        private String status;
+        private boolean incoming;
+
+        public String getId() {
+            return id;
+        }
+
+        public void setId(String id) {
+            this.id = id;
+        }
+
+        public String getDate() {
+            return date;
+        }
+
+        public void setDate(String date) {
+            this.date = date;
+        }
+
+        public String getAdminId() {
+            return adminId;
+        }
+
+        public void setAdminId(String adminId) {
+            this.adminId = adminId;
+        }
+
+        public String getAdminName() {
+            return adminName;
+        }
+
+        public void setAdminName(String adminName) {
+            this.adminName = adminName;
+        }
+
+        public String getReference() {
+            return reference;
+        }
+
+        public void setReference(String reference) {
+            this.reference = reference;
+        }
+
+        public double getAmount() {
+            return amount;
+        }
+
+        public void setAmount(double amount) {
+            this.amount = amount;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public void setStatus(String status) {
+            this.status = status;
+        }
+
+        public boolean isIncoming() {
+            return incoming;
+        }
+
+        public void setIncoming(boolean incoming) {
+            this.incoming = incoming;
         }
     }
 }

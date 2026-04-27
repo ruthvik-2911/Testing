@@ -1,6 +1,7 @@
 package org.jackfruit.keliri.controller;
 
 import org.jackfruit.keliri.model.SuperAdminAnalyticsResponse;
+import org.jackfruit.keliri.model.SuperAdminRevenueResponse;
 import org.jackfruit.keliri.service.SuperAdminAnalyticsService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -19,5 +20,10 @@ public class SuperAdminAnalyticsController {
     @GetMapping
     public ResponseEntity<SuperAdminAnalyticsResponse> getAnalytics() {
         return ResponseEntity.ok(analyticsService.getAnalytics());
+    }
+
+    @GetMapping("/revenue")
+    public ResponseEntity<SuperAdminRevenueResponse> getRevenueAnalytics() {
+        return ResponseEntity.ok(analyticsService.getRevenueAnalytics());
     }
 }
