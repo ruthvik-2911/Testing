@@ -35,12 +35,15 @@ api.interceptors.request.use(
 
 adMobileApi.interceptors.request.use(
   (config) => {
-    // The Ad Mobile backend uses a different JWT than the Spring Boot admin backend.
-    // We prioritize a dedicated token (from env or localStorage) if available.
+    // Hardcoded token for testing as requested by user
+    const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI2NGZiMTE3YS1mNTMwLTRmOTgtYTVkMy0yMWY3ZmVlYzkwNDciLCJfaWQiOiI2NGVkODZkMjMyMDBlMWQ2YzUyMDYwYmMiLCJpYXQiOjE3NzY5NDQzNzEsImV4cCI6MTgwODQ4MDM3MX0.LPpdyyz-QzeGMXRC36rrEZcXqQ4ONCZAIAuCY6i2QZA";
+    
+    /* 
     const token = 
       import.meta.env.VITE_AD_MOBILE_TOKEN || 
       localStorage.getItem('ad_mobile_token') || 
       localStorage.getItem('admin_token');
+    */
       
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
