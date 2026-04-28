@@ -90,7 +90,7 @@ import javax.imageio.ImageIO;
 		    @Value("${aws.region:ap-south-1}")
 		    private String region;
 
-		    @Value("${aws.s3.bucketName:}")
+		    @Value("${aws.s3.bucketName:keliri-uploads}")
 		    private String bucketName;
 
 		    @Value("${aws.s3.endpointUrl:}")

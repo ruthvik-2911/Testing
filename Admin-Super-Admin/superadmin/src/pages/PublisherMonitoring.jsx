@@ -166,6 +166,7 @@ const PublisherMonitoring = () => {
           data={publishers}
           isLoading={isLoading}
           onRowClick={handleOpenDetails}
+          exportFileName="publishers_audit"
           className="hover-glow-border"
         />
       </div>

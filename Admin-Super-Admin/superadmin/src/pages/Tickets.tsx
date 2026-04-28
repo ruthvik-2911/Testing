@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Mail, MessageSquare, Clock, AlertTriangle, Send, Filter, CheckCircle, Search } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { MessageSquare, Clock, AlertTriangle, Send, CheckCircle } from 'lucide-react';
 import PageHeader from '../components/shared/PageHeader';
 import DataTable from '../components/shared/DataTable';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -246,6 +246,7 @@ const Tickets = () => {
                 <PageHeader
                     title="Tickets & Support"
                     subtitle="Manage administrative queries and technical support requests from the KELIRI ecosystem"
+                    actions={null}
                 />
             </div>
 
@@ -277,6 +278,7 @@ const Tickets = () => {
                     data={filteredData}
                     isLoading={isLoading}
                     onRowClick={handleRowClick}
+                    exportFileName="support_tickets"
                 />
             </div>
 

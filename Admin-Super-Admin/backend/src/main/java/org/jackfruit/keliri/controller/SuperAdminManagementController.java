@@ -53,8 +53,15 @@ public class SuperAdminManagementController {
     }
 
     @PostMapping("/admins/{adminId}/reinstate")
-    public ResponseEntity<SuperAdminManagementResponse.AdminActionResponse> reinstateAdmin(@PathVariable String adminId) {
+    public ResponseEntity<SuperAdminManagementResponse.AdminActionResponse> reinstateAdmin(
+            @PathVariable String adminId) {
         return ResponseEntity.ok(managementService.reinstateAdmin(adminId));
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/admins/{adminId}")
+    public ResponseEntity<Void> deleteAdmin(@PathVariable String adminId) {
+        managementService.deleteAdmin(adminId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/admin-notifications")
@@ -72,7 +79,8 @@ public class SuperAdminManagementController {
     }
 
     @GetMapping("/publishers/{publisherId}")
-    public ResponseEntity<SuperAdminManagementResponse.PublisherDetail> getPublisherDetail(@PathVariable String publisherId) {
+    public ResponseEntity<SuperAdminManagementResponse.PublisherDetail> getPublisherDetail(
+            @PathVariable String publisherId) {
         return ResponseEntity.ok(managementService.getPublisherDetail(publisherId));
     }
 
@@ -82,7 +90,8 @@ public class SuperAdminManagementController {
     }
 
     @PostMapping("/ads/{campaignId}/suspend")
-    public ResponseEntity<SuperAdminManagementResponse.AdvertisementRecord> suspendAdvertisement(@PathVariable String campaignId) {
+    public ResponseEntity<SuperAdminManagementResponse.AdvertisementRecord> suspendAdvertisement(
+            @PathVariable String campaignId) {
         return ResponseEntity.ok(managementService.suspendAdvertisement(campaignId));
     }
 
@@ -94,6 +103,12 @@ public class SuperAdminManagementController {
             @RequestParam(value = "entityType", required = false) String entityType,
             @RequestParam(value = "fromDate", required = false) String fromDate,
             @RequestParam(value = "toDate", required = false) String toDate) {
-        return ResponseEntity.ok(managementService.getAuditLogs(search, actionType, actorRole, entityType, fromDate, toDate));
+        return ResponseEntity
+                .ok(managementService.getAuditLogs(search, actionType, actorRole, entityType, fromDate, toDate));
+    }
+
+    @GetMapping("/payments")
+    public ResponseEntity<List<SuperAdminManagementResponse.TransactionRecord>> getTransactions() {
+        return ResponseEntity.ok(managementService.getTransactions());
     }
 }

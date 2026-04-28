@@ -1,11 +1,8 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 
-const data = [
-  { name: 'Banner Ads', value: 512000, color: '#FF6B00' },
-  { name: 'Video Ads', value: 345000, color: '#3B82F6' },
-  { name: 'Thumbnail Ads', value: 124000, color: '#8B5CF6' },
-  { name: 'Sponsored Lists', value: 264800, color: '#10B981' },
-]
+interface RevenueDistributionChartProps {
+  data?: { name: string; value: number; color: string }[]
+}
 
 interface CustomTooltipProps {
   active?: boolean
@@ -48,14 +45,14 @@ const renderLegend = (props: any) => {
   )
 }
 
-export default function RevenueDistributionChart() {
+export default function RevenueDistributionChart({ data = [] }: RevenueDistributionChartProps) {
   return (
     <div className="glass-card p-6 animate-fade-in h-full flex flex-col">
       <div className="mb-5">
         <h3 className="text-sm font-semibold text-gray-900">Revenue by Ad Type</h3>
         <p className="text-xs text-gray-400 mt-0.5">Distribution across formats</p>
       </div>
-      
+
       <div className="flex-1 min-h-[280px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>

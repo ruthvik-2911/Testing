@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Image as ImageIcon, X, RefreshCw } from "lucide-react"
+import { Image as ImageIcon, X, RefreshCw, Plus } from "lucide-react"
 
 interface ImageAdUploadProps {
   imageAd: File | null
@@ -10,6 +10,7 @@ interface ImageAdUploadProps {
 export function ImageAdUpload({ imageAd, onImageAdChange, error }: ImageAdUploadProps) {
   const inputRef = React.useRef<HTMLInputElement>(null)
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
+  const [dragActive, setDragActive] = React.useState(false)
 
   React.useEffect(() => {
     if (imageAd) {
@@ -29,6 +30,12 @@ export function ImageAdUpload({ imageAd, onImageAdChange, error }: ImageAdUpload
   const handleRemove = () => {
     onImageAdChange(null)
     if (inputRef.current) inputRef.current.value = ""
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragActive(false)
+    if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0])
   }
 
   return (
@@ -57,18 +64,28 @@ export function ImageAdUpload({ imageAd, onImageAdChange, error }: ImageAdUpload
         {/* Upload Area */}
         {!previewUrl ? (
           <label
-            className={`flex items-center gap-4 w-full border-2 border-dashed rounded-xl px-5 py-4 cursor-pointer transition-all group ${
-              error
-                ? "border-red-400/60 hover:border-red-500"
-                : "border-gray-200 dark:border-gray-600 hover:border-brand-500 dark:hover:border-brand-500"
+            className={`flex flex-col items-center justify-center gap-2 w-full border-2 border-dashed rounded-xl px-5 py-6 cursor-pointer transition-all ${
+              dragActive
+                ? "border-brand-500 bg-brand-500/5"
+                : error
+                  ? "border-red-400/60 hover:border-red-500"
+                  : "border-gray-200 dark:border-gray-600 hover:border-brand-500 dark:hover:border-brand-500"
             }`}
+            onDragEnter={(e) => { e.preventDefault(); setDragActive(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActive(false) }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
           >
-            <div className="w-10 h-10 bg-brand-500 rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
-              <ImageIcon className="w-5 h-5 text-white" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
+              dragActive ? "bg-brand-500" : "bg-gray-100 dark:bg-gray-700"
+            }`}>
+              <Plus className={`w-5 h-5 ${dragActive ? "text-white" : "text-gray-400"}`} />
             </div>
-            <div>
-              <p className="text-sm font-bold text-gray-900 dark:text-white">Add an Image Ad</p>
-              <p className="text-xs text-gray-400">Tap to pick & upload</p>
+            <div className="text-center">
+              <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                Drag & drop or click to add image
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">JPEG, PNG · Max 5MB</p>
             </div>
             <input
               ref={inputRef}
