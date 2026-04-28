@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import {
@@ -27,12 +27,19 @@ export default function AdminLogin() {
   const navigate = useNavigate();
   const { register, handleSubmit } = useForm();
 
+  useEffect(() => {
+    // Explicitly remove dark mode from root for the login page
+    document.documentElement.classList.remove("dark");
+  }, []);
+
   const onSubmit = async (data: any) => {
     setIsSubmitting(true);
     setError(null);
     try {
       if (activeTab === "email") {
+        console.log('Login Payload:', { email: data.email, password: data.password });
         const result = await adminApi.login(data.email, data.password);
+        console.log('Login Response:', result);
         if (result.success) {
           localStorage.setItem('admin_token', result.token);
           localStorage.setItem('admin_user', JSON.stringify(result.user));

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, AlertCircle, MapPin, Target, BarChart3, Megaphone, User, Radio, ExternalLink } from 'lucide-react';
+import { Eye, AlertCircle, MapPin, Target, BarChart3, Megaphone, User, Radio, ExternalLink, Download } from 'lucide-react';
+import { exportToCSV } from '../utils/export';
 import PageHeader from '../components/shared/PageHeader';
 import StatusBadge from '../components/shared/StatusBadge';
 import DetailDrawer from '../components/shared/DetailDrawer';
@@ -14,7 +15,7 @@ const AdvertisementMonitoring = () => {
     const [selectedAd, setSelectedAd] = useState(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [activeFilters, setActiveFilters] = useState({ status: null, type: null, adType: null });
-    
+
     // Dialog state
     const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, ad: null });
 
@@ -81,10 +82,10 @@ const AdvertisementMonitoring = () => {
     };
 
     const filterOptions = [
-        { 
-            key: 'adType', 
-            label: 'Ad Type', 
-            type: 'checkbox', 
+        {
+            key: 'adType',
+            label: 'Ad Type',
+            type: 'checkbox',
             options: [
                 { label: 'Banner', value: 'Banner' },
                 { label: 'Video', value: 'Video' },
@@ -92,10 +93,10 @@ const AdvertisementMonitoring = () => {
             ],
             appliedValue: activeFilters.adType
         },
-        { 
-            key: 'status', 
-            label: 'Status', 
-            type: 'select', 
+        {
+            key: 'status',
+            label: 'Status',
+            type: 'select',
             options: [
                 { label: 'Active', value: 'Active' },
                 { label: 'Draft', value: 'Draft' },
@@ -116,20 +117,46 @@ const AdvertisementMonitoring = () => {
         setActiveFilters(prev => ({ ...prev, [key]: value }));
     };
 
+    const handleExport = () => {
+        const columns = [
+            { key: 'id', label: 'ID' },
+            { key: 'title', label: 'Title' },
+            { key: 'type', label: 'Type' },
+            { key: 'status', label: 'Status' },
+            { key: 'adminName', label: 'Admin' },
+            { key: 'publisherName', label: 'Publisher' },
+            { key: 'impressions', label: 'Impressions' },
+            { key: 'clicks', label: 'Clicks' },
+            { key: 'ctr', label: 'CTR' },
+            { key: 'createdDate', label: 'Created Date' }
+        ];
+        exportToCSV(filteredData, columns, 'advertisements_audit');
+    };
+
     return (
         <div className="pb-10 space-y-8 animate-fade-in">
             <div className="animate-fade-in-scale">
-                <PageHeader 
-                    title="Advertisement Monitoring" 
+                <PageHeader
+                    title="Advertisement Monitoring"
                     subtitle="System-wide lifecycle management and performance audit of all campaigns"
+                    actions={
+                        <button
+                            onClick={handleExport}
+                            disabled={filteredData.length === 0}
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-primary-600 bg-primary-50 hover:bg-primary-100 rounded-xl transition-all disabled:opacity-50"
+                        >
+                            <Download size={16} />
+                            Export CSV
+                        </button>
+                    }
                 />
             </div>
 
             <div className="card-floating p-0 animate-fade-in-scale delay-100">
-                <FilterBar 
-                    filters={filterOptions} 
-                    onFilterChange={handleFilterChange} 
-                    onReset={() => setActiveFilters({})} 
+                <FilterBar
+                    filters={filterOptions}
+                    onFilterChange={handleFilterChange}
+                    onReset={() => setActiveFilters({})}
                     activeFiltersCount={Object.values(activeFilters).filter(Boolean).length}
                 />
             </div>
@@ -151,21 +178,21 @@ const AdvertisementMonitoring = () => {
                 ) : filteredData.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                         {filteredData.map((ad) => (
-                            <div 
+                            <div
                                 key={ad.id}
                                 onClick={() => { setSelectedAd(ad); setIsDrawerOpen(true); }}
                                 className="group relative bg-white rounded-[2rem] border border-gray-100 shadow-sm hover:shadow-2xl hover:shadow-primary-500/10 transition-all duration-500 cursor-pointer overflow-hidden flex flex-col animate-fade-in"
                             >
                                 {/* Image Preview Wrapper */}
                                 <div className="aspect-[4/3] w-full overflow-hidden relative">
-                                    <img 
-                                        src={ad.image || 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=800&q=80'} 
+                                    <img
+                                        src={ad.image || 'https://images.unsplash.com/photo-1620641788421-7a1c342ea42e?w=800&q=80'}
                                         alt={ad.title}
                                         className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                                     />
                                     {/* Overlay Gradient */}
                                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
-                                    
+
                                     {/* Status Badge Over Image */}
                                     <div className="absolute top-4 right-4 z-10 transition-transform duration-300 group-hover:translate-x-1">
                                         <StatusBadge status={ad.status} />
@@ -201,14 +228,14 @@ const AdvertisementMonitoring = () => {
 
                                     {/* Floating Hover Actions */}
                                     <div className="absolute -top-6 right-6 flex gap-2 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-300 z-20">
-                                        <button 
+                                        <button
                                             onClick={(e) => { e.stopPropagation(); setSelectedAd(ad); setIsDrawerOpen(true); }}
                                             className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center text-primary-500 hover:bg-primary-500 hover:text-white transition-all active:scale-90 border border-gray-50"
                                         >
                                             <Eye size={20} />
                                         </button>
                                         {ad.status === 'Active' && (
-                                            <button 
+                                            <button
                                                 onClick={(e) => { e.stopPropagation(); handleSuspend(ad); }}
                                                 className="w-12 h-12 bg-white shadow-xl rounded-2xl flex items-center justify-center text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-90 border border-gray-50"
                                             >
@@ -222,11 +249,11 @@ const AdvertisementMonitoring = () => {
                     </div>
                 ) : (
                     <div className="card-floating py-20 flex flex-col items-center justify-center text-center">
-                         <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mb-4">
+                        <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mb-4">
                             <Megaphone size={40} />
-                         </div>
-                         <h3 className="text-xl font-black text-gray-900">No campaigns found</h3>
-                         <p className="text-sm text-gray-400 mt-2">Try adjusting your filters or search criteria</p>
+                        </div>
+                        <h3 className="text-xl font-black text-gray-900">No campaigns found</h3>
+                        <p className="text-sm text-gray-400 mt-2">Try adjusting your filters or search criteria</p>
                     </div>
                 )}
             </div>
@@ -238,7 +265,7 @@ const AdvertisementMonitoring = () => {
                 title="Advertisement Deep-Dive"
                 footerActions={
                     selectedAd?.status === 'Active' && (
-                        <button 
+                        <button
                             onClick={() => handleSuspend(selectedAd)}
                             className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl text-xs font-black shadow-lg shadow-red-600/20 active:scale-95 transition-all"
                         >
@@ -262,16 +289,16 @@ const AdvertisementMonitoring = () => {
                                 <h3 className="text-2xl font-black text-gray-900 leading-tight">{selectedAd.title}</h3>
                                 <p className="text-sm font-medium text-gray-400 mt-1 font-mono tracking-tighter">ID: {selectedAd.id}</p>
                             </div>
-                            
+
                             <div className="grid grid-cols-2 gap-4 pt-4 border-t border-gray-50">
-                               <div className="space-y-1">
+                                <div className="space-y-1">
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type</p>
                                     <p className="text-sm font-bold text-gray-900">{selectedAd.type} Advertisement</p>
-                               </div>
-                               <div className="space-y-1">
+                                </div>
+                                <div className="space-y-1">
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Created On</p>
                                     <p className="text-sm font-bold text-gray-900">{selectedAd.createdDate}</p>
-                               </div>
+                                </div>
                             </div>
                         </div>
 
@@ -363,7 +390,7 @@ const AdvertisementMonitoring = () => {
 
             {/* Suspend Confirmation */}
             {confirmDialog.isOpen && (
-                <ConfirmDialog 
+                <ConfirmDialog
                     isOpen={confirmDialog.isOpen}
                     onClose={() => setConfirmDialog({ isOpen: false, ad: null })}
                     onConfirm={executeSuspend}

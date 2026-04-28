@@ -37,11 +37,11 @@ adMobileApi.interceptors.request.use(
   (config) => {
     // The Ad Mobile backend uses a different JWT than the Spring Boot admin backend.
     // We prioritize a dedicated token (from env or localStorage) if available.
-    const token = 
-      import.meta.env.VITE_AD_MOBILE_TOKEN || 
-      localStorage.getItem('ad_mobile_token') || 
+    const token =
+      import.meta.env.VITE_AD_MOBILE_TOKEN ||
+      localStorage.getItem('ad_mobile_token') ||
       localStorage.getItem('admin_token');
-      
+
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -73,6 +73,56 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
+export interface Company {
+  _id: string;
+  name: string;
+  companyLogo?: string | {
+    _id?: string;
+    mediaKey?: string;
+    url?: string;
+    s3Location?: string;
+  };
+  companyType?: string;
+}
+
+export interface CompanyRegistrationPayload {
+  name: string;
+  email: string;
+  companyType: string;
+  phoneNumber: {
+    countryCode: string;
+    dialNumber: string;
+  };
+  companyLogo?: string;
+  companyCategories?: string[];
+  tax?: {
+    taxType: string;
+    taxNumber: string;
+  };
+  billingAddress: {
+    addressLine1: string;
+    addressLine2?: string;
+    city: string;
+    state: string;
+    zipCode: string;
+    country: string;
+  };
+  primaryContact: {
+    name: string;
+    email: string;
+    isSameAsBilling: boolean;
+    phoneNumber: {
+      countryCode: string;
+      dialNumber: string;
+    };
+    alternativePhone?: {
+      countryCode: string;
+      dialNumber: string;
+    };
+  };
+  password?: string;
+}
+
 export interface AdminRegistrationData {
   companyName: string;
   authorizedPerson: string;
@@ -86,9 +136,21 @@ export interface AdminRegistrationData {
 }
 
 export const adminApi = {
-  register: async (formData: FormData): Promise<ApiResponse> => {
+  registerCompany: async (payload: any): Promise<ApiResponse> => {
     try {
-      const response = await api.post('/api/admin/register', formData, {
+      const response = await adMobileApi.post('/v1/company', payload);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
+
+  registerAdmin: async (payload: FormData): Promise<ApiResponse> => {
+    try {
+      const response = await api.post('/api/admin/register', payload, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -101,10 +163,22 @@ export const adminApi = {
       throw error;
     }
   },
-  
+
   checkRegistrationStatus: async (email: string): Promise<ApiResponse> => {
     try {
       const response = await api.get(`/api/admin/status?email=${encodeURIComponent(email)}`);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
+
+  getAllCompanies: async (): Promise<ApiResponse<Company[]>> => {
+    try {
+      const response = await adMobileApi.get('/v1/company/all/list');
       return response.data;
     } catch (error: any) {
       if (error.response?.data) {

@@ -2,6 +2,7 @@ package org.jackfruit.keliri.controller;
 
 import java.util.List;
 
+import org.jackfruit.keliri.model.PasswordSetupRequest;
 import org.jackfruit.keliri.model.SuperAdminAccountDto;
 import org.jackfruit.keliri.service.JwtService;
 import org.jackfruit.keliri.service.SuperAdminAccountService;
@@ -44,6 +45,16 @@ public class SuperAdminAccountController {
             @RequestBody SuperAdminAccountDto.CreateSubAdminRequest request) {
         requireMaster(authorization);
         return ResponseEntity.ok(accountService.createSubAdmin(request));
+    }
+
+    @PostMapping("/setup-password")
+    public ResponseEntity<SuperAdminAccountDto.SubAdminSummary> setupPassword(
+            @RequestBody PasswordSetupRequest request) {
+        // This endpoint doesn't require authorization - it uses a token instead
+        if (request.getSetupToken() == null || request.getSetupToken().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Setup token is required");
+        }
+        return ResponseEntity.ok(accountService.setPasswordWithToken(request.getSetupToken(), request.getNewPassword()));
     }
 
     @PutMapping("/{id}")

@@ -55,7 +55,7 @@ export const uploadMedia = async (file: File): Promise<string> => {
         'Content-Type': 'multipart/form-data',
       },
     });
-    
+
     let responseData = response.data;
     if (typeof responseData === 'string') {
       try {
@@ -64,17 +64,17 @@ export const uploadMedia = async (file: File): Promise<string> => {
         console.warn('Could not parse response data as JSON:', responseData);
       }
     }
-    
+
     console.log('📦 Media upload response:', responseData);
-    
+
     // Safely get the uid. Some backend versions might return it directly, or nested in data
     const uid = responseData?.data?.uid || responseData?.uid;
-    
+
     if (!uid) {
       console.error('❌ Failed to extract uid from response:', responseData);
       throw new Error('No UID returned from media upload');
     }
-    
+
     return uid;
   } catch (error) {
     console.error('❌ Media Upload API Error:', error);
@@ -135,17 +135,17 @@ export const fetchAds = async ({
   // as per the mobile app's PublishedAdsDashboard logic.
   const response = await adMobileApi.get(ENDPOINTS.campaignsList, { params });
   const result = response.data;
-  
+
   const rawData = result.data ?? [];
 
   const ads: Advertisement[] = rawData.map((camp: any) => {
     const ad = camp.advertisementId || {};
-    
+
     // Normalize status: backends uses "ACTIVE", "PENDING", "INACTIVE", "EXPIRED", "COMPLETED"
     // Frontend AdStatus expects: 'Draft' | 'Pending' | 'Active' | 'Expired' | 'Suspended'
     let normalizedStatus: AdStatus = 'Pending';
     const backendStatus = (camp.compaignsStatus || '').toUpperCase();
-    
+
     if (backendStatus === 'ACTIVE') normalizedStatus = 'Active';
     else if (backendStatus === 'PENDING') normalizedStatus = 'Pending';
     else if (backendStatus === 'EXPIRED' || backendStatus === 'COMPLETED') normalizedStatus = 'Expired';
@@ -161,7 +161,7 @@ export const fetchAds = async ({
       impressions: camp.reachedPublishingCount ?? 0, // using reachedPublishingCount as a proxy for impressions if not available
       clicks: camp.clicks ?? 0,
       ctr: camp.ctr ?? 0,
-      paymentStatus: 'Paid',
+      paymentStatus: (normalizedStatus === 'Draft' || normalizedStatus === 'Pending') ? 'Pending' : 'Paid',
     };
   });
 
@@ -196,7 +196,7 @@ export const getAdById = async (id: string): Promise<Advertisement> => {
     impressions: ad.impressions ?? 0,
     clicks: ad.clicks ?? 0,
     ctr: ad.ctr ?? 0,
-    paymentStatus: 'Paid',
+    paymentStatus: (ad.status === 'INACTIVE' || ad.status === 'Draft' || ad.status === 'Pending') ? 'Pending' : 'Paid',
   };
 };
 

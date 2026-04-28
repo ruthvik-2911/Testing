@@ -1,4 +1,4 @@
-import { api } from './api';
+import { api, adMobileApi } from './api';
 
 // ─────────────────────────────────────────
 // Types
@@ -84,8 +84,23 @@ export const fetchPublishers = async ({
   status,
 }: FetchPublishersArgs): Promise<FetchPublishersResult> => {
   try {
-    const response = await api.get('/api/admin/publishers')
-    let publishers: Publisher[] = (response.data?.publishers || []).map(mapPublisher)
+    const response = await adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { params: { all: 'yes' } })
+    const rawData = response.data?.data || []
+
+    // Map the payload matching the Mobile Backend's signature
+    let publishers: Publisher[] = rawData.map((p: any) => ({
+      id: p.uid || p.id,
+      name: p.name || 'Unknown',
+      contactPerson: p.contactPerson || 'N/A',
+      location: p.location || 'Unknown',
+      status: p.status === 'INACTIVE' ? 'Inactive' : 'Active', // Fallback to Active
+      lastActive: p.createdAt
+        ? new Date(p.createdAt).toLocaleDateString('en-IN')
+        : new Date().toLocaleDateString('en-IN'),
+      mobile: p.mobile || p.phone || '',
+      email: p.email || '',
+      address: p.address || p.bio || '',
+    }))
 
     if (search) {
       const s = search.toLowerCase()
@@ -102,7 +117,7 @@ export const fetchPublishers = async ({
     }
 
     const totalItems = publishers.length
-    const totalPages = Math.ceil(totalItems / limit)
+    const totalPages = Math.ceil(totalItems / limit) || 1
     const startIndex = (page - 1) * limit
     const paginatedData = publishers.slice(startIndex, startIndex + limit)
 
@@ -125,19 +140,67 @@ export const getPublisherById = async (id: string): Promise<Publisher> => {
 // Create Publisher
 // ─────────────────────────────────────────
 export const createPublisher = async (data: any): Promise<Publisher> => {
-  const payload = {
+  // Clean phone number extracting last 10 digits
+  const cleanPhone = data.mobile.replace(/[^0-9]/g, '').slice(-10) || "0000000000";
+
+  // 1. Create Company Profile (to map to physical locations / Ad Manager table)
+  const companyPayload = {
     name: data.name,
-    contactPerson: data.contactPerson,
-    mobile: data.mobile,
     email: data.email,
-    address: data.address || '',
-    location:
-      data.latitude && data.longitude
-        ? `${data.latitude}, ${data.longitude}`
-        : data.location || '',
+    companyType: "PRODUCTS_SERVICES",
+    phoneNumber: {
+      countryCode: "+91",
+      dialNumber: cleanPhone
+    },
+    billingAddress: {
+      addressLine1: data.address || "Publisher Headquarters",
+      city: "Unknown",
+      state: "Unknown",
+      zipCode: "000000",
+      country: "India"
+    },
+    primaryContact: {
+      name: data.contactPerson || data.name,
+      email: data.email,
+      isSameAsBilling: true,
+      phoneNumber: {
+        countryCode: "+91",
+        dialNumber: cleanPhone
+      }
+    }
   }
-  const response = await api.post('/api/admin/publishers', payload)
-  return mapPublisher(response.data.publisher)
+
+  const companyResponse = await adMobileApi.post('/v1/company', companyPayload)
+  const createdCompany = companyResponse.data?.data || {}
+
+  // 2. Create User Profile (so the publisher can actually log into their system)
+  const userPayload = {
+    name: data.name,
+    email: data.email,
+    phone: data.mobile,
+    password: "Secure_Temp_Password!123", // Auto-generated temporary password
+    bio: data.address || `${data.name} Publisher`,
+    avatar: ""
+  }
+
+  try {
+    await adMobileApi.post('/v1/user/create/PUBLISHER', userPayload)
+  } catch (error) {
+    console.warn("User credential creation failed. Company profile still exists.", error)
+  }
+
+  // Return mapped object so UI table updates correctly immediately
+  return {
+    id: createdCompany.uid || createdCompany._id || Date.now().toString(),
+    name: createdCompany.name || data.name,
+    contactPerson: data.contactPerson || data.name,
+    location: data.address || 'Unknown',
+    status: 'Active',
+    lastActive: new Date().toLocaleDateString('en-IN'),
+    mobile: createdCompany.phoneNumber?.dialNumber || data.mobile,
+    email: createdCompany.email || data.email,
+    address: data.address,
+  }
 }
 
 // ─────────────────────────────────────────

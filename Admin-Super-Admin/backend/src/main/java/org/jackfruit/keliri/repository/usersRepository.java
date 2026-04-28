@@ -23,7 +23,7 @@ public interface usersRepository extends MongoRepository<users, String>{
 	 @Query(value="{'fullName': {$regex:'.*?0.*', $options:'i'} }")//,fields ="{'_id':1}"
 	    List<users> searchAllFields(String keyword);
 	    
-	 @Query(value="{'givendor':1}",fields="{'fullName':1,'emailAddress':1,'phoneNumber.dialNumber':1,'lastKnownLocation':1,'givendor':1}")
+	 @Query(value="{'givendor':1}",fields="{'fullName':1,'emailAddress':1,'phoneNumber.dialNumber':1,'lastKnownLocation':1,'givendor':1,'accountStatus':1}")
 	 List<users> findbygivendor();
 
 	 @Query(value = "{'_id': { '$in': ?0 }}", fields = "{'fullName':1,'emailAddress':1,'lastKnownLocation':1,'profilePicPath':1}")

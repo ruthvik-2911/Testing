@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Eye, CheckCircle2, XCircle, AlertCircle, RefreshCw, FileText, Phone, Mail, Building2, Calendar } from 'lucide-react';
+import { Eye, CheckCircle2, XCircle, AlertCircle, RefreshCw, FileText, Phone, Mail, Building2, Calendar, Trash2 } from 'lucide-react';
 import PageHeader from '../components/shared/PageHeader';
 import DataTable from '../components/shared/DataTable';
 import StatusBadge from '../components/shared/StatusBadge';
@@ -11,6 +11,7 @@ import {
   fetchAdminNotifications,
   fetchAdmins,
   runAdminAction,
+  deleteAdmin,
 } from '../lib/management';
 
 const AdminManagement = () => {
@@ -75,6 +76,19 @@ const AdminManagement = () => {
     await runAdminAction(admin.id, actionMap[type], reason);
     await refreshListAndDetail(admin.id);
     setConfirmDialog({ isOpen: false, type: '', admin: null });
+  };
+
+  const handleDeleteAdmin = async (admin) => {
+    if (window.confirm(`Are you sure you want to PERMANENTLY delete the account and registration for ${admin.email}? This cannot be undone.`)) {
+      setIsLoading(true);
+      try {
+        await deleteAdmin(admin.id);
+        await refreshListAndDetail();
+        setIsDrawerOpen(false);
+      } finally {
+        setIsLoading(false);
+      }
+    }
   };
 
   const handleOpenDetails = async (admin) => {
@@ -158,6 +172,14 @@ const AdminManagement = () => {
               <RefreshCw size={18} />
             </button>
           )}
+
+          <button
+            onClick={(e) => { e.stopPropagation(); handleDeleteAdmin(row); }}
+            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all ml-1"
+            title="Delete Admin"
+          >
+            <Trash2 size={18} />
+          </button>
         </div>
       ),
     },
@@ -189,6 +211,7 @@ const AdminManagement = () => {
   const adminPublishers = selectedAdmin?.publishers ?? [];
   const performance = selectedAdmin?.performance ?? { totalAds: 0, revenue: 0, avgCtr: 0 };
   const documents = selectedAdmin?.documents ?? [];
+  const registration = selectedAdmin?.registration ?? null;
 
   return (
     <div className="pb-10 space-y-8">
@@ -214,6 +237,7 @@ const AdminManagement = () => {
           data={admins}
           isLoading={isLoading}
           onRowClick={handleOpenDetails}
+          exportFileName="admins_list"
           className="hover-glow-border"
         />
       </div>
@@ -324,7 +348,7 @@ const AdminManagement = () => {
               <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Verification Documents</h4>
               <div className="space-y-2">
                 {documents.map((doc, idx) => (
-                  <div key={idx} 
+                  <div key={idx}
                     className="flex items-center justify-between p-3 bg-white border border-gray-100 rounded-xl hover:border-primary-200 transition-all cursor-pointer group"
                     onClick={() => doc.url && window.open(doc.url, '_blank')}
                   >
@@ -342,6 +366,35 @@ const AdminManagement = () => {
                 ))}
               </div>
             </div>
+
+            {/* Registration details */}
+            {registration && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Registration Details</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    ['Authorized Person', registration.authorizedPerson],
+                    ['Company Type', registration.companyType],
+                    ['GST Number', registration.gstNumber],
+                    ['Mobile', `${registration.countryCode || ''} ${registration.mobileNumber || ''}`.trim()],
+                    ['Address Line 1', registration.businessAddress],
+                    ['Address Line 2', registration.addressLine2],
+                    ['City', registration.city],
+                    ['State', registration.state],
+                    ['Zip Code', registration.zipCode],
+                    ['Country', registration.country],
+                    ['Submitted At', registration.submittedAt],
+                  ]
+                    .filter(([, v]) => v && String(v).trim().length > 0)
+                    .map(([label, value], idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-gray-100">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-1">{label}</p>
+                        <p className="text-sm font-semibold text-gray-900 break-words">{String(value)}</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Publishers Under Management</h4>

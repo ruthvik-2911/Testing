@@ -6,8 +6,8 @@ export async function fetchSuperAdminAnalytics() {
   const response = await fetch(`${API_BASE_URL}/api/superadmin/analytics`, {
     headers: session?.token
       ? {
-          Authorization: `Bearer ${session.token}`,
-        }
+        Authorization: `Bearer ${session.token}`,
+      }
       : undefined,
   })
 
@@ -26,6 +26,26 @@ export async function fetchSuperAdminAnalytics() {
 
   if (!payload || !('kpis' in payload)) {
     throw new AuthError('Unable to load analytics', response.status)
+  }
+
+  return payload
+}
+
+export async function fetchRevenueAnalytics() {
+  const session = getAuthSession()
+
+  const response = await fetch(`${API_BASE_URL}/api/superadmin/analytics/revenue`, {
+    headers: session?.token
+      ? {
+        Authorization: `Bearer ${session.token}`,
+      }
+      : undefined,
+  })
+
+  const payload = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    throw new AuthError(payload?.message || 'Unable to load revenue analytics', response.status)
   }
 
   return payload

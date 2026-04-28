@@ -1,9 +1,11 @@
 package org.jackfruit.keliri.service;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.jackfruit.keliri.model.phoneNumber;
 import org.jackfruit.keliri.model.users;
 import org.jackfruit.keliri.repository.usersRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,13 +22,18 @@ public class AdminAuthService {
     @Autowired
     private JwtService jwtService;
 
+    @Autowired
+    private MobilizeApiService mobilizeApiService;
+
     public Map<String, Object> login(String identifier, String password) {
         // Try finding by email
         Optional<users> userOpt = usersRepo.findByEmailAddress(identifier);
-        
-        // If not found, could try by phone, but SRS usually implies email/password for admins
-        
-        users user = userOpt.orElseThrow(() -> new RuntimeException("Invalid credentials"));
+
+        // If not found locally, bootstrap from an approved Mobilize registration.
+        users user = userOpt.orElseGet(() -> provisionApprovedMobilizeAdmin(identifier, password));
+        if (user == null) {
+            throw new RuntimeException("Invalid credentials");
+        }
 
         // SECURE LOGIN: Check if account is ACTIVE
         if (user.getAccountStatus() == null || !"ACTIVE".equals(user.getAccountStatus())) {
@@ -51,5 +58,79 @@ public class AdminAuthService {
         }
 
         throw new RuntimeException("Invalid credentials");
+    }
+
+    private users provisionApprovedMobilizeAdmin(String identifier, String password) {
+        List<Map> companies = mobilizeApiService.fetchAllCompaniesDirectly();
+        Map<String, Object> company = (Map<String, Object>) companies.stream()
+                .filter(c -> c != null && identifier.equalsIgnoreCase(String.valueOf(((Map) c).get("email"))))
+                .findFirst()
+                .orElse(null);
+        if (company == null) {
+            return null;
+        }
+
+        Object statusObj = company.get("status");
+        boolean isActive = statusObj instanceof Boolean
+                ? (Boolean) statusObj
+                : Boolean.parseBoolean(String.valueOf(statusObj));
+        if (!isActive) {
+            return null;
+        }
+
+        Object regObj = company.get("keliriRegistration");
+        if (!(regObj instanceof Map)) {
+            return null;
+        }
+        Map<String, Object> reg = (Map<String, Object>) regObj;
+        String passwordHash = reg.get("passwordHash") != null ? String.valueOf(reg.get("passwordHash")) : null;
+        if (passwordHash == null || passwordHash.isBlank() || !passwordEncoder.matches(password, passwordHash)) {
+            return null;
+        }
+
+        users user = new users();
+        Object companyId = company.get("_id");
+        if (companyId != null) {
+            user.setId(String.valueOf(companyId));
+        }
+        user.setFullName(firstNonBlank(
+                asString(reg.get("authorizedPerson")),
+                asString(company.get("name")),
+                "Admin"));
+        user.setEmailAddress(identifier);
+        user.setPassword(passwordHash);
+        user.setCompanyName(firstNonBlank(
+                asString(reg.get("companyName")),
+                asString(company.get("name")),
+                ""));
+        user.setUserType("ADMIN");
+        user.setAccountStatus("ACTIVE");
+        user.setGivendor(1);
+        user.setLatitude(0);
+        user.setLongitude(0);
+
+        String mobile = asString(reg.get("mobileNumber"));
+        if (mobile != null && !mobile.isBlank()) {
+            phoneNumber phone = new phoneNumber();
+            phone.setCountryCode(firstNonBlank(asString(reg.get("countryCode")), "+91"));
+            phone.setDialNumber(mobile);
+            user.setPhoneNumber(phone);
+        }
+
+        return usersRepo.save(user);
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) return null;
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 }
