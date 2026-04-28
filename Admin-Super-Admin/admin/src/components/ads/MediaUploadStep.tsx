@@ -105,11 +105,6 @@ export function MediaUploadStep({ mediaState, setMediaState, validationErrors }:
               onFilesChange={(files) => setMediaState(s => ({ ...s, bannerFiles: files }))}
               error={validationErrors.banner}
             />
-            <ImageAdUpload
-              imageAd={mediaState.imageAd}
-              onImageAdChange={(file) => setMediaState(s => ({ ...s, imageAd: file }))}
-              error={validationErrors.imageAd}
-            />
           </motion.div>
         )}
       </AnimatePresence>

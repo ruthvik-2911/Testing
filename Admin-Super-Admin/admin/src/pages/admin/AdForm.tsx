@@ -118,9 +118,6 @@ export default function AdForm() {
       } else if (mediaState.bannerFiles.length > 4) {
         errors.banner = "Maximum 4 banner images allowed."
       }
-      if (!mediaState.imageAd) {
-        errors.imageAd = "An Image Ad is required for Banner ads."
-      }
     } else if (adType === "Image Ad") {
       if (!mediaState.imageAd) {
         errors.imageAd = "Please upload an image for your ad."
@@ -238,7 +235,9 @@ export default function AdForm() {
         description: data.description,
         type: data.type,
         companyUID: extractedCompanyUID,
-        imageAdUID: uploadedMedia.current.imageAdUID || undefined,
+        imageAdUID: (data.type === "Banner" && uploadedMedia.current.bannerUIDs.length > 0) 
+          ? uploadedMedia.current.bannerUIDs[0] 
+          : (uploadedMedia.current.imageAdUID || undefined),
         bannerUIDs: uploadedMedia.current.bannerUIDs,
         videoUID: uploadedMedia.current.videoUID || undefined,
         videoUrl,
@@ -383,7 +382,7 @@ export default function AdForm() {
                   type="button"
                   onClick={handleBack}
                   disabled={currentStep === 0 || isSubmitting || isUploading}
-                  className="px-6 py-2 text-gray-600 dark:text-gray-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+                  className="px-6 py-2 text-brand-500 hover:text-brand-600 font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
                 >
                   Back
                 </button>
@@ -416,7 +415,7 @@ export default function AdForm() {
                       type="button"
                       onClick={handleNext}
                       disabled={isUploading}
-                      className="flex items-center gap-2 px-8 py-2.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-white rounded-lg text-sm font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 px-8 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-semibold shadow-sm shadow-brand-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
                       {isUploading ? "Uploading..." : "Continue"}

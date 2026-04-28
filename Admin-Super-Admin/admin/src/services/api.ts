@@ -134,9 +134,13 @@ export interface AdminRegistrationData {
 }
 
 export const adminApi = {
-  register: async (payload: CompanyRegistrationPayload): Promise<ApiResponse> => {
+  register: async (formData: FormData): Promise<ApiResponse> => {
     try {
-      const response = await adMobileApi.post('/v1/company', payload);
+      const response = await api.post('/api/admin/register', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
       return response.data;
     } catch (error: any) {
       if (error.response?.data) {

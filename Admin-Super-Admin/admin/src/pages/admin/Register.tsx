@@ -87,63 +87,37 @@ export default function AdminRegister() {
 
     setIsSubmitting(true);
     try {
-      let payload: any;
+      const formData = new FormData();
       
       if (registrationMode === 'new') {
-        payload = {
-          name: data.companyName,
-          email: data.emailId,
-          companyType: data.companyType || 'PRODUCTS_SERVICES',
-          phoneNumber: {
-            countryCode: data.countryCode || '+91',
-            dialNumber: data.mobileNumber
-          },
-          tax: showGstCertificate && data.gstNumber ? {
-            taxType: 'GST',
-            taxNumber: data.gstNumber
-          } : undefined,
-          billingAddress: {
-            addressLine1: data.businessAddress,
-            addressLine2: data.addressLine2 || '',
-            city: data.city,
-            state: data.state,
-            zipCode: data.zipCode,
-            country: data.country || 'India'
-          },
-          primaryContact: {
-            name: data.authorizedPerson,
-            email: data.emailId,
-            isSameAsBilling: true,
-            phoneNumber: {
-              countryCode: data.countryCode || '+91',
-              dialNumber: data.mobileNumber
-            }
-          },
-          password: data.password // Pass it along just in case the backend uses it for user creation
-        };
-      } else {
-        if (!selectedCompanyId) {
-          toast.error('Please select an existing company');
-          setIsSubmitting(false);
-          return;
-        }
+        formData.append('companyName', data.companyName);
+        formData.append('authorizedPerson', data.authorizedPerson);
+        formData.append('businessAddress', `${data.businessAddress}, ${data.addressLine2 || ''}, ${data.city}, ${data.state}, ${data.zipCode}, ${data.country || 'India'}`);
+        formData.append('gstNumber', data.gstNumber || '');
+        formData.append('mobileNumber', `${data.countryCode || '+91'}${data.mobileNumber}`);
+        formData.append('emailId', data.emailId);
+        formData.append('password', data.password);
         
-        payload = {
-          companyId: selectedCompanyId,
-          email: data.emailId,
-          name: data.authorizedPerson,
-          phoneNumber: {
-            countryCode: data.countryCode || '+91',
-            dialNumber: data.mobileNumber
-          },
-          password: data.password
-        };
+        if (gstCertFile) {
+          formData.append('gstCertificate', gstCertFile);
+        }
+        if (companyDocFile) {
+          formData.append('companyRegistrationDoc', companyDocFile);
+        }
+        if (idProofFile) {
+          formData.append('idProof', idProofFile);
+        }
+      } else {
+        // Fallback or legacy support for existing mode if backend supported it
+        toast.error('Existing company registration is not yet supported in the local backend');
+        setIsSubmitting(false);
+        return;
       }
 
-      const response = await adminApi.register(payload);
+      const response = await adminApi.register(formData);
       
       if (response.success) {
-        toast.success(response.message || 'Registration successful');
+        toast.success(response.message || 'Registration submitted successfully. Awaiting approval.');
         localStorage.setItem('registrationEmail', data.emailId);
         setTimeout(() => {
           navigate('/admin/status');
