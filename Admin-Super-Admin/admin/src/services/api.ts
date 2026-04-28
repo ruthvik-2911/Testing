@@ -152,9 +152,21 @@ export const adminApi = {
       const response = await api.get(`/api/admin/status?email=${encodeURIComponent(email)}`);
       return response.data;
     } catch (error: any) {
-      if (error.response?.data) {
-        return error.response.data;
+      // Backend uses 404 when no registration exists for the email.
+      // Treat that as a valid "not found" state so the UI can render cleanly.
+      if (error.response?.status === 404) {
+        const message =
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          'No registration found for this email';
+        return {
+          success: false,
+          message,
+          error: message,
+        };
       }
+
+      if (error.response?.data) return error.response.data;
       throw error;
     }
   },

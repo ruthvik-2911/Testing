@@ -23,6 +23,20 @@ export interface AdminDetail extends AdminRecord {
     revenue: number
     avgCtr: number
   }
+  registration?: {
+    authorizedPerson?: string
+    businessAddress?: string
+    addressLine2?: string
+    city?: string
+    state?: string
+    zipCode?: string
+    country?: string
+    gstNumber?: string
+    companyType?: string
+    countryCode?: string
+    mobileNumber?: string
+    submittedAt?: string
+  }
   documents: Array<{
     name: string
     type: string

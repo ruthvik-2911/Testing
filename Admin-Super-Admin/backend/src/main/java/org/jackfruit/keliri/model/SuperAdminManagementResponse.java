@@ -74,6 +74,7 @@ public class SuperAdminManagementResponse {
         private PerformanceSummary performance;
         private List<DocumentItem> documents = new ArrayList<>();
         private List<PublisherMini> publishers = new ArrayList<>();
+        private RegistrationInfo registration;
 
         public PerformanceSummary getPerformance() {
             return performance;
@@ -97,6 +98,125 @@ public class SuperAdminManagementResponse {
 
         public void setPublishers(List<PublisherMini> publishers) {
             this.publishers = publishers;
+        }
+
+        public RegistrationInfo getRegistration() {
+            return registration;
+        }
+
+        public void setRegistration(RegistrationInfo registration) {
+            this.registration = registration;
+        }
+    }
+
+    public static class RegistrationInfo {
+        private String authorizedPerson;
+        private String businessAddress;
+        private String addressLine2;
+        private String city;
+        private String state;
+        private String zipCode;
+        private String country;
+        private String gstNumber;
+        private String companyType;
+        private String countryCode;
+        private String mobileNumber;
+        private String submittedAt;
+
+        public String getAuthorizedPerson() {
+            return authorizedPerson;
+        }
+
+        public void setAuthorizedPerson(String authorizedPerson) {
+            this.authorizedPerson = authorizedPerson;
+        }
+
+        public String getBusinessAddress() {
+            return businessAddress;
+        }
+
+        public void setBusinessAddress(String businessAddress) {
+            this.businessAddress = businessAddress;
+        }
+
+        public String getAddressLine2() {
+            return addressLine2;
+        }
+
+        public void setAddressLine2(String addressLine2) {
+            this.addressLine2 = addressLine2;
+        }
+
+        public String getCity() {
+            return city;
+        }
+
+        public void setCity(String city) {
+            this.city = city;
+        }
+
+        public String getState() {
+            return state;
+        }
+
+        public void setState(String state) {
+            this.state = state;
+        }
+
+        public String getZipCode() {
+            return zipCode;
+        }
+
+        public void setZipCode(String zipCode) {
+            this.zipCode = zipCode;
+        }
+
+        public String getCountry() {
+            return country;
+        }
+
+        public void setCountry(String country) {
+            this.country = country;
+        }
+
+        public String getGstNumber() {
+            return gstNumber;
+        }
+
+        public void setGstNumber(String gstNumber) {
+            this.gstNumber = gstNumber;
+        }
+
+        public String getCompanyType() {
+            return companyType;
+        }
+
+        public void setCompanyType(String companyType) {
+            this.companyType = companyType;
+        }
+
+        public String getCountryCode() {
+            return countryCode;
+        }
+
+        public void setCountryCode(String countryCode) {
+            this.countryCode = countryCode;
+        }
+
+        public String getMobileNumber() {
+            return mobileNumber;
+        }
+
+        public void setMobileNumber(String mobileNumber) {
+            this.mobileNumber = mobileNumber;
+        }
+
+        public String getSubmittedAt() {
+            return submittedAt;
+        }
+
+        public void setSubmittedAt(String submittedAt) {
+            this.submittedAt = submittedAt;
         }
     }
 

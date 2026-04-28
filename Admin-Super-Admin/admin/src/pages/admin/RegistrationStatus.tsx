@@ -80,10 +80,18 @@ export default function RegistrationStatus() {
       if (response.success) {
         setStatus(response.status.toLowerCase() as RegistrationStatus);
         setReason(response.rejectionReason);
+      } else {
+        // 404 from backend is normalized into success=false by the API wrapper.
+        // Keep the UI stable and inform the user if it's just a missing/incorrect email.
+        const msg = response.message || response.error;
+        if (msg && /no registration found/i.test(msg)) {
+          toast.error('No registration found for this email. Please check the email or register again.');
+        }
       }
     } catch (error: any) {
+      // Non-404 errors (network/server) still come here.
       console.error('Error fetching status:', error);
-      // If 404, might be a demo or wrong email
+      toast.error('Unable to fetch status. Please try again.');
     } finally {
       setIsLoading(false);
     }

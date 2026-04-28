@@ -211,6 +211,7 @@ const AdminManagement = () => {
   const adminPublishers = selectedAdmin?.publishers ?? [];
   const performance = selectedAdmin?.performance ?? { totalAds: 0, revenue: 0, avgCtr: 0 };
   const documents = selectedAdmin?.documents ?? [];
+  const registration = selectedAdmin?.registration ?? null;
 
   return (
     <div className="pb-10 space-y-8">
@@ -365,6 +366,35 @@ const AdminManagement = () => {
                 ))}
               </div>
             </div>
+
+            {/* Registration details */}
+            {registration && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Registration Details</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    ['Authorized Person', registration.authorizedPerson],
+                    ['Company Type', registration.companyType],
+                    ['GST Number', registration.gstNumber],
+                    ['Mobile', `${registration.countryCode || ''} ${registration.mobileNumber || ''}`.trim()],
+                    ['Address Line 1', registration.businessAddress],
+                    ['Address Line 2', registration.addressLine2],
+                    ['City', registration.city],
+                    ['State', registration.state],
+                    ['Zip Code', registration.zipCode],
+                    ['Country', registration.country],
+                    ['Submitted At', registration.submittedAt],
+                  ]
+                    .filter(([, v]) => v && String(v).trim().length > 0)
+                    .map(([label, value], idx) => (
+                      <div key={idx} className="bg-white p-3 rounded-xl border border-gray-100">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter mb-1">{label}</p>
+                        <p className="text-sm font-semibold text-gray-900 break-words">{String(value)}</p>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3">
               <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider">Publishers Under Management</h4>

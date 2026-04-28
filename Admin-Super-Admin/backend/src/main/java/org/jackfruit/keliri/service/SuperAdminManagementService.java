@@ -173,10 +173,43 @@ public class SuperAdminManagementService {
         SuperAdminManagementResponse.AdminRecord base = mobilizeCompanyToAdminRecord(company);
         copyAdmin(base, detail);
 
-        // Documents from Mobilize are currently limited to companyLogo
+        // Documents + full registration payload (stored under keliriRegistration)
         List<SuperAdminManagementResponse.DocumentItem> docs = new ArrayList<>();
         if (company.get("companyLogo") != null) {
             docs.add(newDocument("Company Logo", "Logo", company.get("companyLogo").toString()));
+        }
+
+        Object regObj = company.get("keliriRegistration");
+        if (regObj instanceof Map) {
+            Map regPayload = (Map) regObj;
+            Object gstUrl = regPayload.get("gstCertificateUrl");
+            Object companyDocUrl = regPayload.get("companyRegistrationDocUrl");
+            Object idProofUrl = regPayload.get("idProofUrl");
+
+            if (gstUrl != null && !String.valueOf(gstUrl).isBlank()) {
+                docs.add(newDocument("GST Certificate", "GST", String.valueOf(gstUrl)));
+            }
+            if (companyDocUrl != null && !String.valueOf(companyDocUrl).isBlank()) {
+                docs.add(newDocument("Company Registration Document", "Company", String.valueOf(companyDocUrl)));
+            }
+            if (idProofUrl != null && !String.valueOf(idProofUrl).isBlank()) {
+                docs.add(newDocument("ID Proof", "ID", String.valueOf(idProofUrl)));
+            }
+
+            SuperAdminManagementResponse.RegistrationInfo info = new SuperAdminManagementResponse.RegistrationInfo();
+            info.setAuthorizedPerson(stringOrEmpty(regPayload.get("authorizedPerson")));
+            info.setBusinessAddress(stringOrEmpty(regPayload.get("businessAddress")));
+            info.setAddressLine2(stringOrEmpty(regPayload.get("addressLine2")));
+            info.setCity(stringOrEmpty(regPayload.get("city")));
+            info.setState(stringOrEmpty(regPayload.get("state")));
+            info.setZipCode(stringOrEmpty(regPayload.get("zipCode")));
+            info.setCountry(stringOrEmpty(regPayload.get("country")));
+            info.setGstNumber(stringOrEmpty(regPayload.get("gstNumber")));
+            info.setCompanyType(stringOrEmpty(regPayload.get("companyType")));
+            info.setCountryCode(stringOrEmpty(regPayload.get("countryCode")));
+            info.setMobileNumber(stringOrEmpty(regPayload.get("mobileNumber")));
+            info.setSubmittedAt(stringOrEmpty(regPayload.get("submittedAt")));
+            detail.setRegistration(info);
         }
 
         detail.setDocuments(docs);
@@ -184,6 +217,27 @@ public class SuperAdminManagementService {
         detail.setPerformance(new SuperAdminManagementResponse.PerformanceSummary());
 
         return detail;
+    }
+
+    private String stringOrEmpty(Object value) {
+        if (value == null) return "";
+        String s = String.valueOf(value);
+        return s == null ? "" : s;
+    }
+
+    private String stringOrNull(Object value) {
+        if (value == null) return null;
+        return String.valueOf(value);
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) return null;
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
     }
 
     public SuperAdminManagementResponse.AdminActionResponse approveAdmin(String adminId) {
@@ -225,14 +279,54 @@ public class SuperAdminManagementService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Company registration not found in Unified Mobilize DB"));
 
-        String uid = (String) company.get("uid");
-        if (uid == null)
-            uid = adminId;
-
-        boolean success = mobilizeApiService.approveCompany(uid);
+        boolean success = mobilizeApiService.updateCompanyStatusByCompanyDoc(company, true);
         if (!success) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                     "Failed to approve company in Mobilize API");
+        }
+
+        // Provision/update the local admin user used by /api/admin/login.
+        Map<String, Object> regPayload = company.get("keliriRegistration") instanceof Map
+                ? (Map<String, Object>) company.get("keliriRegistration")
+                : Map.of();
+        String email = firstNonBlank(
+                stringOrNull(regPayload.get("email")),
+                stringOrNull(regPayload.get("emailId")),
+                stringOrNull(company.get("email")));
+        if (email != null) {
+            users user = usersRepository.findByEmailAddress(email).orElseGet(users::new);
+            if (user.getId() == null || user.getId().isBlank()) {
+                user.setId(adminId);
+            }
+            user.setFullName(firstNonBlank(
+                    stringOrNull(regPayload.get("authorizedPerson")),
+                    stringOrNull(company.get("name")),
+                    "Admin"));
+            user.setEmailAddress(email);
+            user.setCompanyName(firstNonBlank(
+                    stringOrNull(regPayload.get("companyName")),
+                    stringOrNull(company.get("name")),
+                    ""));
+            user.setUserType("ADMIN");
+            user.setAccountStatus("ACTIVE");
+            user.setGivendor(1);
+            user.setLatitude(0);
+            user.setLongitude(0);
+
+            String passwordHash = stringOrNull(regPayload.get("passwordHash"));
+            if (passwordHash != null && !passwordHash.isBlank()) {
+                user.setPassword(passwordHash);
+            }
+
+            String mobile = stringOrNull(regPayload.get("mobileNumber"));
+            if (mobile != null && !mobile.isBlank()) {
+                org.jackfruit.keliri.model.phoneNumber phone = new org.jackfruit.keliri.model.phoneNumber();
+                phone.setCountryCode(firstNonBlank(stringOrNull(regPayload.get("countryCode")), "+91"));
+                phone.setDialNumber(mobile);
+                user.setPhoneNumber(phone);
+            }
+
+            usersRepository.save(user);
         }
 
         return applyAdminAction(adminId, "Active", null, "Admin registration approved",
@@ -258,19 +352,61 @@ public class SuperAdminManagementService {
     }
 
     public SuperAdminManagementResponse.AdminActionResponse suspendAdmin(String adminId) {
-        users user = usersRepository.findById(adminId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found"));
-        user.setAccountStatus("SUSPENDED");
-        usersRepository.save(user);
-        return applyAdminAction(adminId, "Suspended", null, null, null, "Account");
+        // 1) Prefer local DB users (real active admins)
+        users user = usersRepository.findById(adminId).orElse(null);
+        if (user != null) {
+            user.setAccountStatus("SUSPENDED");
+            usersRepository.save(user);
+            return applyAdminAction(adminId, "Suspended", null, null, null, "Account");
+        }
+
+        // 2) If adminId comes from Mobilize "companies" dataset, suspend via Mobilize API
+        Map<String, Object> company = (Map<String, Object>) (Map) mobilizeApiService.fetchAllCompaniesDirectly()
+                .stream()
+                .filter(c -> Objects.equals(String.valueOf(c.get("uid")), adminId)
+                        || Objects.equals(String.valueOf(c.get("_id")), adminId))
+                .findFirst()
+                .orElse(null);
+
+        if (company != null) {
+            boolean success = mobilizeApiService.updateCompanyStatusByCompanyDoc(company, false);
+            if (!success) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Failed to suspend company in Mobilize");
+            }
+            return applyAdminAction(adminId, "Suspended", null, null, null, "Account");
+        }
+
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found");
     }
 
     public SuperAdminManagementResponse.AdminActionResponse reinstateAdmin(String adminId) {
-        users user = usersRepository.findById(adminId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found"));
-        user.setAccountStatus("ACTIVE");
-        usersRepository.save(user);
-        return applyAdminAction(adminId, "Active", null, null, null, "Account");
+        // 1) Prefer local DB users (real active admins)
+        users user = usersRepository.findById(adminId).orElse(null);
+        if (user != null) {
+            user.setAccountStatus("ACTIVE");
+            usersRepository.save(user);
+            return applyAdminAction(adminId, "Active", null, null, null, "Account");
+        }
+
+        // 2) If adminId comes from Mobilize "companies" dataset, reinstate via Mobilize API
+        Map<String, Object> company = (Map<String, Object>) (Map) mobilizeApiService.fetchAllCompaniesDirectly()
+                .stream()
+                .filter(c -> Objects.equals(String.valueOf(c.get("uid")), adminId)
+                        || Objects.equals(String.valueOf(c.get("_id")), adminId))
+                .findFirst()
+                .orElse(null);
+
+        if (company != null) {
+            boolean success = mobilizeApiService.updateCompanyStatusByCompanyDoc(company, true);
+            if (!success) {
+                throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                        "Failed to reinstate company in Mobilize");
+            }
+            return applyAdminAction(adminId, "Active", null, null, null, "Account");
+        }
+
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Admin not found");
     }
 
     public void deleteAdmin(String adminId) {
@@ -1084,9 +1220,9 @@ public class SuperAdminManagementService {
     private SuperAdminManagementResponse.AdminRecord mobilizeCompanyToAdminRecord(Map<String, Object> company) {
         SuperAdminManagementResponse.AdminRecord record = new SuperAdminManagementResponse.AdminRecord();
 
-        String id = (String) company.get("_id");
+        String id = stringOrNull(company.get("_id"));
         if (id == null)
-            id = (String) company.get("uid");
+            id = stringOrNull(company.get("uid"));
         record.setId(id);
 
         Map primaryContact = (Map) company.get("primaryContact");
@@ -1114,7 +1250,9 @@ public class SuperAdminManagementService {
         Object statusObj = company.get("status");
         boolean isActive = statusObj instanceof Boolean ? (Boolean) statusObj
                 : Boolean.parseBoolean(statusObj.toString());
-        record.setStatus(isActive ? "Active" : "Pending");
+        // Mobilize uses boolean status; in our Super Admin UI we treat status=false as Suspended
+        // (pending registrations are tracked separately via admin_registrations / local flows).
+        record.setStatus(isActive ? "Active" : "Suspended");
 
         if (primaryContact != null && primaryContact.get("phoneNumber") != null) {
             Map phone = (Map) primaryContact.get("phoneNumber");

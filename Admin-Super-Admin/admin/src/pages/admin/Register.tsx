@@ -90,12 +90,19 @@ export default function AdminRegister() {
       if (registrationMode === 'new') {
         const formData = new FormData();
         formData.append('companyName', data.companyName);
+        formData.append('companyType', data.companyType);
         formData.append('authorizedPerson', data.authorizedPerson);
         formData.append('businessAddress', data.businessAddress);
+        if (data.addressLine2) formData.append('addressLine2', data.addressLine2);
+        if (data.city) formData.append('city', data.city);
+        if (data.state) formData.append('state', data.state);
+        if (data.zipCode) formData.append('zipCode', data.zipCode);
+        if (data.country) formData.append('country', data.country);
         if (showGstCertificate && data.gstNumber) {
           formData.append('gstNumber', data.gstNumber);
         }
         formData.append('mobileNumber', data.mobileNumber);
+        if (data.countryCode) formData.append('countryCode', data.countryCode);
         formData.append('emailId', data.emailId);
         formData.append('password', data.password);
 
