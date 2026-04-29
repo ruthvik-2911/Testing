@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,7 +14,7 @@ import {
   ArrowRight
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { adminApi } from "../../services/api";
+import { adminApi, adMobileApi } from "../../services/api";
 import { AlertCircle } from "lucide-react";
 
 type TabType = "email" | "otp";
@@ -27,15 +27,47 @@ export default function AdminLogin() {
   const navigate = useNavigate();
   const { register, handleSubmit } = useForm();
 
+  useEffect(() => {
+    // Explicitly remove dark mode from root for the login page
+    document.documentElement.classList.remove("dark");
+  }, []);
+
   const onSubmit = async (data: any) => {
     setIsSubmitting(true);
     setError(null);
     try {
       if (activeTab === "email") {
+        console.log('Login Payload:', { email: data.email, password: data.password });
         const result = await adminApi.login(data.email, data.password);
+        console.log('Login Response:', result);
         if (result.success) {
           localStorage.setItem('admin_token', result.token);
-          localStorage.setItem('admin_user', JSON.stringify(result.user));
+
+          // Enrich the user object with companyUID from Ad Mobile if missing
+          let userObj = result.user || {};
+          if (!userObj.companyUID) {
+            try {
+              const companyRes = await adMobileApi.get('/v1/company/PRODUCTS_SERVICES', {
+                params: { all: 'yes' }
+              });
+              const allCompanies: any[] = companyRes.data?.data || [];
+              const matched = allCompanies.find(
+                (c: any) => 
+                  c?.email?.toLowerCase() === data.email?.toLowerCase() ||
+                  (userObj.company && c?.name?.toLowerCase() === userObj.company?.toLowerCase())
+              );
+              if (matched?.uid) {
+                userObj = { ...userObj, companyUID: matched.uid };
+                console.log('✅ companyUID resolved from Ad Mobile:', matched.uid);
+              } else {
+                console.warn('⚠️ No matching company found in Ad Mobile for:', data.email);
+              }
+            } catch (e) {
+              console.warn('Could not look up companyUID from Ad Mobile:', e);
+            }
+          }
+
+          localStorage.setItem('admin_user', JSON.stringify(userObj));
           navigate("/admin/dashboard");
         } else {
           setError(result.message || "Failed to sign in. Please check your credentials.");

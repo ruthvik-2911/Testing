@@ -67,6 +67,8 @@ api.interceptors.response.use(
 );
 
 export interface ApiResponse<T = any> {
+  user?: Record<string, any>;  // returned by Spring Boot login
+  token?: string;               // returned by Spring Boot login
   success: boolean;
   message: string;
   data?: T;
@@ -76,7 +78,12 @@ export interface ApiResponse<T = any> {
 export interface Company {
   _id: string;
   name: string;
-  companyLogo?: string;
+  companyLogo?: string | {
+    _id?: string;
+    mediaKey?: string;
+    url?: string;
+    s3Location?: string;
+  };
   companyType?: string;
 }
 
@@ -131,7 +138,19 @@ export interface AdminRegistrationData {
 }
 
 export const adminApi = {
-  register: async (payload: FormData): Promise<ApiResponse> => {
+  registerCompany: async (payload: any): Promise<ApiResponse> => {
+    try {
+      const response = await adMobileApi.post('/v1/company', payload);
+      return response.data;
+    } catch (error: any) {
+      if (error.response?.data) {
+        return error.response.data;
+      }
+      throw error;
+    }
+  },
+
+  registerAdmin: async (payload: FormData): Promise<ApiResponse> => {
     try {
       const response = await api.post('/api/admin/register', payload, {
         headers: {
@@ -152,21 +171,9 @@ export const adminApi = {
       const response = await api.get(`/api/admin/status?email=${encodeURIComponent(email)}`);
       return response.data;
     } catch (error: any) {
-      // Backend uses 404 when no registration exists for the email.
-      // Treat that as a valid "not found" state so the UI can render cleanly.
-      if (error.response?.status === 404) {
-        const message =
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          'No registration found for this email';
-        return {
-          success: false,
-          message,
-          error: message,
-        };
+      if (error.response?.data) {
+        return error.response.data;
       }
-
-      if (error.response?.data) return error.response.data;
       throw error;
     }
   },

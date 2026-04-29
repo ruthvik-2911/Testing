@@ -6,8 +6,12 @@ import org.jackfruit.keliri.repository.TicketMessageRepository;
 import org.jackfruit.keliri.repository.TicketRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +26,10 @@ public class SupportTicketService {
     @Autowired
     private TicketMessageRepository messageRepository;
 
-    public Ticket createTicket(String adminId, String subject, String category, String initialMessage) {
+    @Autowired
+    private FileStorageService fileStorageService;
+
+    public Ticket createTicket(String adminId, String subject, String category, String initialMessage, List<MultipartFile> attachments) {
         Ticket ticket = new Ticket();
         ticket.setAdminId(adminId);
         ticket.setSubject(subject);
@@ -38,6 +45,11 @@ public class SupportTicketService {
         message.setSenderType("ADMIN");
         message.setMessage(initialMessage);
         message.setCreatedAt(Instant.now());
+        List<String> attachmentUrls = uploadAttachments(adminId, savedTicket.getId(), attachments);
+        message.setAttachmentUrls(attachmentUrls);
+        if (!attachmentUrls.isEmpty()) {
+            message.setAttachmentUrl(attachmentUrls.get(0));
+        }
 
         messageRepository.save(message);
 
@@ -123,5 +135,26 @@ public class SupportTicketService {
         // emailService.sendTicketStatusUpdateEmail(ticket);
 
         return ticket;
+    }
+
+    private List<String> uploadAttachments(String adminId, String ticketId, List<MultipartFile> attachments) {
+        if (attachments == null || attachments.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<String> uploadedUrls = new ArrayList<>();
+        String basePath = "tickets/" + adminId + "/" + ticketId;
+        for (int i = 0; i < attachments.size(); i++) {
+            MultipartFile attachment = attachments.get(i);
+            if (attachment == null || attachment.isEmpty()) {
+                continue;
+            }
+            try {
+                uploadedUrls.add(fileStorageService.uploadFile(attachment, basePath + "/attachment-" + (i + 1)));
+            } catch (IOException e) {
+                throw new RuntimeException("Failed to upload ticket attachment", e);
+            }
+        }
+        return uploadedUrls;
     }
 }

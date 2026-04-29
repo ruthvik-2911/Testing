@@ -45,10 +45,9 @@ public class FileStorageService {
      * @return the public S3 URL of the uploaded file
      */
     public String uploadFile(MultipartFile file, String subFolder) throws IOException {
-        if (accessKey.isBlank() || secretKey.isBlank()) {
-            // On AWS (EC2/ECS with IAM Role), no hardcoded credentials needed
-            System.out.println(
-                    "[FileStorageService] No explicit AWS keys configured — using IAM Role / default credentials.");
+        if (accessKey == null || accessKey.isBlank() || secretKey == null || secretKey.isBlank()) {
+            System.out.println("[FileStorageService] AWS keys missing. Using local storage fallback.");
+            return saveLocally(file, subFolder);
         }
 
         S3Client s3Client = buildS3Client();
@@ -69,8 +68,29 @@ public class FileStorageService {
                 .getUrl(GetUrlRequest.builder().bucket(bucketName).key(s3Key).build())
                 .toString();
 
-        System.out.println("[FileStorageService] Uploaded: " + s3Url);
+        System.out.println("[FileStorageService] Uploaded to S3: " + s3Url);
         return s3Url;
+    }
+
+    private String saveLocally(MultipartFile file, String subFolder) throws IOException {
+        String originalName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "file";
+        String fileName = UUID.randomUUID() + "_" + originalName;
+
+        // Define local storage path - using project root /uploads
+        String projectRoot = System.getProperty("user.dir");
+        java.nio.file.Path uploadDir = java.nio.file.Paths.get(projectRoot, "uploads", subFolder);
+
+        if (!java.nio.file.Files.exists(uploadDir)) {
+            java.nio.file.Files.createDirectories(uploadDir);
+        }
+
+        java.nio.file.Path filePath = uploadDir.resolve(fileName);
+        java.nio.file.Files.copy(file.getInputStream(), filePath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+        // Return a path that will be served by Spring (e.g., /api/uploads/...)
+        String publicUrl = "/api/uploads/" + subFolder + "/" + fileName;
+        System.out.println("[FileStorageService] Saved locally: " + publicUrl);
+        return publicUrl;
     }
 
     private S3Client buildS3Client() {

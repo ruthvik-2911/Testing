@@ -30,6 +30,7 @@ const Analytics = () => {
   const [analytics, setAnalytics] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [lastUpdated, setLastUpdated] = useState(new Date())
 
   useEffect(() => {
     let cancelled = false
@@ -42,6 +43,7 @@ const Analytics = () => {
         const payload = await fetchSuperAdminAnalytics()
         if (cancelled) return
         setAnalytics(payload)
+        setLastUpdated(new Date())
       } catch (err) {
         if (cancelled) return
         if (err instanceof AuthError) {
@@ -57,8 +59,13 @@ const Analytics = () => {
     }
 
     loadAnalytics()
+    
+    // Auto-refresh every 30 seconds for real-time analytics
+    const interval = setInterval(loadAnalytics, 30000)
+    
     return () => {
       cancelled = true
+      clearInterval(interval)
     }
   }, [])
 
@@ -67,7 +74,16 @@ const Analytics = () => {
   }
 
   const visibleData = useMemo(() => analytics ?? {
-    kpis: [],
+    kpis: [
+      { title: 'Total Campaigns', value: '0', change: 0 },
+      { title: 'Active Campaigns', value: '0', change: 0 },
+      { title: 'Geo Targeted', value: '0', change: 0 },
+      { title: 'Unique Locations', value: '0', change: 0 },
+      { title: 'Avg Radius', value: '0.00 km', change: 0 },
+      { title: 'Publishers', value: '0', change: 0 },
+      { title: 'Total Reach', value: '0', change: 0 },
+      { title: 'Engagement', value: '0', change: 0 },
+    ],
     topCampaigns: [],
     adTypeBreakdown: [],
     locationRows: [],
@@ -82,7 +98,7 @@ const Analytics = () => {
   }, [analytics])
 
   const renderKPIs = (data = []) => (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
       {data.map((kpi, idx) => (
         <div key={`${kpi.title}-${idx}`} className="card-floating tilt-card animate-fade-in-scale group hover:-translate-y-2 transition-all duration-500 overflow-hidden relative">
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
@@ -242,11 +258,10 @@ const Analytics = () => {
                 {visibleData.creatorRows.map((row, idx) => (
                   <tr key={`${row.name}-${idx}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
-                      <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${
-                        idx === 0 ? 'bg-yellow-100 text-yellow-700'
-                          : idx === 1 ? 'bg-gray-100 text-gray-600'
-                            : idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-transparent text-gray-400'
-                      }`}>
+                      <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${idx === 0 ? 'bg-yellow-100 text-yellow-700'
+                        : idx === 1 ? 'bg-gray-100 text-gray-600'
+                          : idx === 2 ? 'bg-orange-100 text-orange-700' : 'bg-transparent text-gray-400'
+                        }`}>
                         {row.rank}
                       </span>
                     </td>
@@ -373,7 +388,7 @@ const Analytics = () => {
     <div className="pb-10">
       <PageHeader
         title="Analytics & Reporting"
-        subtitle="Live campaign publishing analytics from Keliri data"
+        subtitle="Real-time campaign performance and Mobilize reach analytics"
         actions={(
           <div className="relative group">
             <button className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-all">
@@ -407,7 +422,7 @@ const Analytics = () => {
         <div className="h-6 w-px bg-gray-200" />
 
         <div className="text-xs font-bold text-gray-500 uppercase tracking-wider">
-          {loading ? 'Loading analytics...' : 'Live analytics mode'}
+          {loading ? 'Loading analytics...' : `Live analytics • Last updated: ${lastUpdated.toLocaleTimeString()}`}
         </div>
 
         {error && (
@@ -423,9 +438,8 @@ const Analytics = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${
-                isActive ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all ${isActive ? 'bg-white text-primary-600 shadow-sm' : 'text-gray-500 hover:text-gray-900'
+                }`}
             >
               <Icon size={16} />
               {tab.label}
@@ -435,8 +449,8 @@ const Analytics = () => {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {Array.from({ length: 6 }).map((_, index) => (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          {Array.from({ length: 8 }).map((_, index) => (
             <div key={index} className="bg-white rounded-2xl shadow-card h-40 animate-pulse" />
           ))}
         </div>

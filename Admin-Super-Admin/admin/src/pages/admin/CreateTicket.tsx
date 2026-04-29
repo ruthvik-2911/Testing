@@ -43,7 +43,7 @@ export default function CreateTicket() {
   const onSubmit = async (data: TicketFormData) => {
     setIsSubmitting(true)
     try {
-      await createTicket(data)
+      await createTicket(data, attachments)
       toast.success("Support ticket raised successfully")
       setTimeout(() => navigate("/admin/tickets"), 1500)
     } catch (err) {

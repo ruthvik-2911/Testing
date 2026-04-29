@@ -1,0 +1,28 @@
+{
+  "name": "analytics-test-data",
+  "version": "1.0.0",
+  "description": "Test data setup scripts for Mobilize and Keliri analytics",
+  "main": "setup_all_data.js",
+  "scripts": {
+    "setup:mobilize": "node setup_mobilize_test_data.js",
+    "setup:keliri": "node setup_keliri_test_data.js",
+    "setup:all": "node setup_all_data.js",
+    "clear:mobilize": "node -e \"require('./setup_mobilize_test_data.js').clearMobilizeData()\"",
+    "clear:keliri": "node -e \"require('./setup_keliri_test_data.js').clearKeliriData()\"",
+    "clear:all": "npm run clear:mobilize && npm run clear:keliri",
+    "test": "echo \"Running all setup scripts...\" && npm run setup:all"
+  },
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "mongodb": "^4.17.1"
+  },
+  "keywords": [
+    "mongodb",
+    "test-data",
+    "analytics",
+    "mobilize",
+    "keliri"
+  ],
+  "author": "Analytics Team",
+  "license": "MIT"
+}

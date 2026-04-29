@@ -11,4 +11,6 @@ public interface PaymentTransactionRepository extends MongoRepository<PaymentTra
     Optional<PaymentTransaction> findByRazorpayOrderId(String razorpayOrderId);
 
     List<PaymentTransaction> findByAdminId(String adminId);
+
+    List<PaymentTransaction> findByAdminIdAndStatus(String adminId, String status);
 }

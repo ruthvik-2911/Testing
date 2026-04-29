@@ -9,10 +9,9 @@ import {
   AlertCircle, 
   Users, 
   IndianRupee, 
-  MousePointerClick,
-  Moon,
-  Sun
+  MousePointerClick
 } from "lucide-react"
+import { ThemeToggle } from "../../components/layout/ThemeToggle"
 import { KpiCard } from "../../components/dashboard/KpiCard"
 import { PerformanceChart, EngagementChart, SpendPerformanceChart } from "../../components/dashboard/Charts"
 import { RecentActivity } from "../../components/dashboard/RecentActivity"
@@ -23,26 +22,20 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("30")
-  const [isDarkMode, setIsDarkMode] = useState(false)
-
-  useEffect(() => {
-    // Check initial dark mode preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setIsDarkMode(true)
-      document.documentElement.classList.add('dark')
-    }
-  }, [])
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode)
-    document.documentElement.classList.toggle('dark')
-  }
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
       try {
-        const result = await fetchDashboardData(filter)
+        // Get company UID from session
+        let companyUID = undefined;
+        const userStr = localStorage.getItem('admin_user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          companyUID = user.companyUID || user.companyId || user.uid;
+        }
+
+        const result = await fetchDashboardData(filter, companyUID)
         setData(result)
       } catch (error) {
         console.error("Failed to load dashboard data", error)
@@ -75,20 +68,23 @@ export default function Dashboard() {
             <p className="text-gray-500 dark:text-gray-400 mt-1">Welcome back, here's what's happening today.</p>
           </div>
           
-          <div className="flex items-center gap-3 bg-white dark:bg-[#1C1F26] p-1 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
-             {['Today', '7', '30'].map((f) => (
-               <button
-                 key={f}
-                 onClick={() => setFilter(f)}
-                 className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                   filter === f 
-                     ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400 shadow-sm' 
-                     : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
-                 }`}
-               >
-                 {f === 'Today' ? f : `Last ${f} Days`}
-               </button>
-             ))}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 bg-white dark:bg-[#1C1F26] p-1 rounded-lg border border-gray-200 dark:border-gray-800 shadow-sm transition-colors">
+               {['Today', '7', '30'].map((f) => (
+                 <button
+                   key={f}
+                   onClick={() => setFilter(f)}
+                   className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                     filter === f 
+                       ? 'bg-brand-50 text-brand-600 dark:bg-brand-500/20 dark:text-brand-400 shadow-sm' 
+                       : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                   }`}
+                 >
+                   {f === 'Today' ? f : `Last ${f} Days`}
+                 </button>
+               ))}
+            </div>
+            <ThemeToggle />
           </div>
         </div>
 

@@ -49,6 +49,7 @@ export interface FetchPublishersArgs {
   limit: number
   search?: string
   status?: string
+  companyUID?: string
 }
 
 export interface FetchPublishersResult {
@@ -82,16 +83,18 @@ export const fetchPublishers = async ({
   limit,
   search,
   status,
+  companyUID,
 }: FetchPublishersArgs): Promise<FetchPublishersResult> => {
   try {
-    const response = await adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { params: { all: 'yes' } })
-    const rawData = response.data?.data || []
+    // Use our Spring Boot backend endpoint instead of Mobilize API
+    const response = await api.get('/api/admin/publishers')
+    const rawData = response.data?.publishers || []
 
-    // Map the payload matching the Mobile Backend's signature
+    // Map the payload matching our backend's signature
     let publishers: Publisher[] = rawData.map((p: any) => ({
-      id: p.uid || p.id,
+      id: p._id || p.id,
       name: p.name || 'Unknown',
-      contactPerson: p.contactPerson || 'N/A',
+      contactPerson: p.contact || 'N/A',
       location: p.location || 'Unknown',
       status: p.status === 'INACTIVE' ? 'Inactive' : 'Active', // Fallback to Active
       lastActive: p.createdAt
@@ -101,6 +104,8 @@ export const fetchPublishers = async ({
       email: p.email || '',
       address: p.address || p.bio || '',
     }))
+
+    // Show all publishers - no company filtering needed
 
     if (search) {
       const s = search.toLowerCase()
@@ -143,63 +148,36 @@ export const createPublisher = async (data: any): Promise<Publisher> => {
   // Clean phone number extracting last 10 digits
   const cleanPhone = data.mobile.replace(/[^0-9]/g, '').slice(-10) || "0000000000";
 
-  // 1. Create Company Profile (to map to physical locations / Ad Manager table)
-  const companyPayload = {
+  // Create publisher using our Spring Boot backend
+  const publisherPayload = {
     name: data.name,
     email: data.email,
-    companyType: "PRODUCTS_SERVICES",
-    phoneNumber: {
-      countryCode: "+91",
-      dialNumber: cleanPhone
-    },
-    billingAddress: {
-      addressLine1: data.address || "Publisher Headquarters",
-      city: "Unknown",
-      state: "Unknown",
-      zipCode: "000000",
-      country: "India"
-    },
-    primaryContact: {
-      name: data.contactPerson || data.name,
-      email: data.email,
-      isSameAsBilling: true,
-      phoneNumber: {
-        countryCode: "+91",
-        dialNumber: cleanPhone
-      }
-    }
-  }
-
-  const companyResponse = await adMobileApi.post('/v1/company', companyPayload)
-  const createdCompany = companyResponse.data?.data || {}
-
-  // 2. Create User Profile (so the publisher can actually log into their system)
-  const userPayload = {
-    name: data.name,
-    email: data.email,
-    phone: data.mobile,
-    password: "Secure_Temp_Password!123", // Auto-generated temporary password
-    bio: data.address || `${data.name} Publisher`,
-    avatar: ""
+    mobile: cleanPhone,
+    contactPerson: data.contactPerson || data.name,
+    address: data.address || 'Unknown',
+    location: data.address || 'Unknown',
+    status: 'ACTIVE'
   }
 
   try {
-    await adMobileApi.post('/v1/user/create/PUBLISHER', userPayload)
+    const response = await api.post('/api/admin/publishers', publisherPayload)
+    const createdPublisher = response.data?.publisher || response.data
+    
+    // Return mapped object so UI table updates correctly immediately
+    return {
+      id: createdPublisher._id || createdPublisher.id || Date.now().toString(),
+      name: createdPublisher.name || data.name,
+      contactPerson: data.contactPerson || data.name,
+      location: data.address || 'Unknown',
+      status: 'Active',
+      lastActive: new Date().toLocaleDateString('en-IN'),
+      mobile: cleanPhone,
+      email: data.email,
+      address: data.address,
+    }
   } catch (error) {
-    console.warn("User credential creation failed. Company profile still exists.", error)
-  }
-
-  // Return mapped object so UI table updates correctly immediately
-  return {
-    id: createdCompany.uid || createdCompany._id || Date.now().toString(),
-    name: createdCompany.name || data.name,
-    contactPerson: data.contactPerson || data.name,
-    location: data.address || 'Unknown',
-    status: 'Active',
-    lastActive: new Date().toLocaleDateString('en-IN'),
-    mobile: createdCompany.phoneNumber?.dialNumber || data.mobile,
-    email: createdCompany.email || data.email,
-    address: data.address,
+    console.error('Error creating publisher:', error)
+    throw error
   }
 }
 

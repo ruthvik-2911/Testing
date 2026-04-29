@@ -4,6 +4,8 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 @Document(collection = "ticket_messages")
 public class TicketMessage {
@@ -18,6 +20,7 @@ public class TicketMessage {
     private String message;
 
     private String attachmentUrl; // optional
+    private List<String> attachmentUrls = new ArrayList<>();
 
     private Instant createdAt;
 
@@ -61,6 +64,14 @@ public class TicketMessage {
 
     public void setAttachmentUrl(String attachmentUrl) {
         this.attachmentUrl = attachmentUrl;
+    }
+
+    public List<String> getAttachmentUrls() {
+        return attachmentUrls;
+    }
+
+    public void setAttachmentUrls(List<String> attachmentUrls) {
+        this.attachmentUrls = attachmentUrls;
     }
 
     public Instant getCreatedAt() {

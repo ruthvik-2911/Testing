@@ -4,22 +4,29 @@ import io.jsonwebtoken.Claims;
 import org.jackfruit.keliri.model.Ticket;
 import org.jackfruit.keliri.service.JwtService;
 import org.jackfruit.keliri.service.SupportTicketService;
+import org.jackfruit.keliri.service.SuperAdminManagementService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 @RestController
 @RequestMapping("/api/admin/tickets")
 public class AdminSupportTicketController {
-
     @Autowired
     private SupportTicketService ticketService;
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private SuperAdminManagementService managementService;
 
     private String getAdminIdFromAuth(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) return null;
@@ -32,33 +39,49 @@ public class AdminSupportTicketController {
         }
     }
 
-    @PostMapping
-    public ResponseEntity<?> createTicket(@RequestHeader(value = "Authorization", required = false) String auth, @RequestBody Map<String, String> body) {
+    @PostMapping(consumes = "multipart/form-data")
+    public ResponseEntity<?> createTicket(
+            @RequestHeader(value = "Authorization", required = false) String auth,
+            jakarta.servlet.http.HttpServletRequest request,
+            @RequestParam("subject") String subject,
+            @RequestParam(value = "category", required = false) String category,
+            @RequestParam("message") String message,
+            @RequestParam(value = "attachments", required = false) MultipartFile[] attachments) {
         String adminId = getAdminIdFromAuth(auth);
         if (adminId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Unauthorized"));
-        
-        String subject = body.get("subject");
-        String category = body.get("category");
-        String message = body.get("message");
-        
-        if (subject == null || message == null) {
+
+        if (subject == null || subject.trim().isEmpty() || message == null || message.trim().isEmpty()) {
              return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Subject and message are required"));
         }
 
-        Ticket ticket = ticketService.createTicket(adminId, subject, category, message);
+        List<MultipartFile> attachmentList = attachments == null ? Collections.emptyList() : Arrays.asList(attachments);
+        Ticket ticket = ticketService.createTicket(adminId, subject, category, message, attachmentList);
+        managementService.recordAuditEvent(
+                "Admin",
+                "Admin",
+                "Ticket Created",
+                "Ticket",
+                ticket.getId(),
+                "Created support ticket",
+                clientIp(request),
+                "Local Ticket");
         return ResponseEntity.ok(Map.of("success", true, "ticket", ticket));
     }
 
     @GetMapping
-    public ResponseEntity<?> getTickets(@RequestHeader(value = "Authorization", required = false) String auth) {
+    public ResponseEntity<?> getTickets(@RequestHeader(value = "Authorization", required = false) String auth,
+                                        jakarta.servlet.http.HttpServletRequest request) {
         String adminId = getAdminIdFromAuth(auth);
         if (adminId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Unauthorized"));
-        
+        managementService.recordAuditEvent("Admin", "Admin", "Ticket List View", "Ticket", adminId,
+                "Viewed ticket list", clientIp(request), "Local Ticket");
         return ResponseEntity.ok(Map.of("success", true, "tickets", ticketService.getTicketsForAdmin(adminId)));
     }
 
     @GetMapping("/{ticketId}")
-    public ResponseEntity<?> getTicketDetail(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable String ticketId) {
+    public ResponseEntity<?> getTicketDetail(@RequestHeader(value = "Authorization", required = false) String auth,
+                                             jakarta.servlet.http.HttpServletRequest request,
+                                             @PathVariable String ticketId) {
         String adminId = getAdminIdFromAuth(auth);
         if (adminId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Unauthorized"));
         
@@ -67,12 +90,15 @@ public class AdminSupportTicketController {
         
         Ticket t = (Ticket) detail.get("ticket");
         if (!t.getAdminId().equals(adminId)) return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("success", false, "message", "Forbidden"));
-
+        managementService.recordAuditEvent("Admin", "Admin", "Ticket Detail View", "Ticket", ticketId,
+                "Viewed ticket detail", clientIp(request), "Local Ticket");
         return ResponseEntity.ok(Map.of("success", true, "data", detail));
     }
 
     @PostMapping("/{ticketId}/reply")
-    public ResponseEntity<?> replyTicket(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable String ticketId, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> replyTicket(@RequestHeader(value = "Authorization", required = false) String auth,
+                                         jakarta.servlet.http.HttpServletRequest request,
+                                         @PathVariable String ticketId, @RequestBody Map<String, String> body) {
         String adminId = getAdminIdFromAuth(auth);
         if (adminId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Unauthorized"));
         
@@ -87,11 +113,16 @@ public class AdminSupportTicketController {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Message is required"));
         }
 
-        return ResponseEntity.ok(Map.of("success", true, "message", ticketService.replyToTicket(ticketId, "ADMIN", message)));
+        var reply = ticketService.replyToTicket(ticketId, "ADMIN", message);
+        managementService.recordAuditEvent("Admin", "Admin", "Ticket Reply", "Ticket", ticketId,
+                "Admin replied to support ticket", clientIp(request), "Local Ticket");
+        return ResponseEntity.ok(Map.of("success", true, "message", reply));
     }
 
     @PatchMapping("/{ticketId}/reopen")
-    public ResponseEntity<?> reopenTicket(@RequestHeader(value = "Authorization", required = false) String auth, @PathVariable String ticketId) {
+    public ResponseEntity<?> reopenTicket(@RequestHeader(value = "Authorization", required = false) String auth,
+                                          jakarta.servlet.http.HttpServletRequest request,
+                                          @PathVariable String ticketId) {
         String adminId = getAdminIdFromAuth(auth);
         if (adminId == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("success", false, "message", "Unauthorized"));
         
@@ -101,6 +132,18 @@ public class AdminSupportTicketController {
         Ticket t = (Ticket) detail.get("ticket");
         if (!t.getAdminId().equals(adminId)) return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("success", false, "message", "Forbidden"));
 
-        return ResponseEntity.ok(Map.of("success", true, "ticket", ticketService.updateTicketStatus(ticketId, "OPEN")));
+        Ticket ticket = ticketService.updateTicketStatus(ticketId, "OPEN");
+        managementService.recordAuditEvent("Admin", "Admin", "Ticket Reopen", "Ticket", ticketId,
+                "Reopened support ticket", clientIp(request), "Local Ticket");
+        return ResponseEntity.ok(Map.of("success", true, "ticket", ticket));
+    }
+
+    private String clientIp(jakarta.servlet.http.HttpServletRequest request) {
+        if (request == null) return "unknown";
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

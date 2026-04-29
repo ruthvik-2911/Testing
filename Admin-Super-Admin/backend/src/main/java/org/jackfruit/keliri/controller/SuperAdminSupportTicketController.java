@@ -2,6 +2,7 @@ package org.jackfruit.keliri.controller;
 
 import org.jackfruit.keliri.model.Ticket;
 import org.jackfruit.keliri.service.SupportTicketService;
+import org.jackfruit.keliri.service.SuperAdminManagementService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,38 +17,89 @@ public class SuperAdminSupportTicketController {
     @Autowired
     private SupportTicketService ticketService;
 
+    @Autowired
+    private SuperAdminManagementService managementService;
+
     @GetMapping
-    public ResponseEntity<?> getAllTickets(@RequestParam(required = false) String status, 
-                                           @RequestParam(required = false) String adminId) {
-        // Super admin auth filtering is generically scoped at routing level per user architectural patterns
+    public ResponseEntity<?> getAllTickets(@RequestParam(required = false) String status,
+                                           @RequestParam(required = false) String adminId,
+                                           jakarta.servlet.http.HttpServletRequest request) {
+        managementService.recordAuditEvent(
+                "Super Admin",
+                "Super Admin",
+                "Ticket List View",
+                "Ticket",
+                adminId != null ? adminId : "ALL",
+                "Viewed all support tickets",
+                clientIp(request),
+                "Local Ticket");
         return ResponseEntity.ok(Map.of("success", true, "tickets", ticketService.getAllTickets(status, adminId)));
     }
 
     @GetMapping("/{ticketId}")
-    public ResponseEntity<?> getTicketDetail(@PathVariable String ticketId) {
+    public ResponseEntity<?> getTicketDetail(@PathVariable String ticketId, jakarta.servlet.http.HttpServletRequest request) {
         Map<String, Object> detail = ticketService.getTicketDetail(ticketId);
         if (detail == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("success", false, "message", "Ticket not found"));
-        
+        managementService.recordAuditEvent(
+                "Super Admin",
+                "Super Admin",
+                "Ticket Detail View",
+                "Ticket",
+                ticketId,
+                "Viewed support ticket detail",
+                clientIp(request),
+                "Local Ticket");
         return ResponseEntity.ok(Map.of("success", true, "data", detail));
     }
 
     @PostMapping("/{ticketId}/reply")
-    public ResponseEntity<?> replyTicket(@PathVariable String ticketId, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> replyTicket(@PathVariable String ticketId, @RequestBody Map<String, String> body,
+                                         jakarta.servlet.http.HttpServletRequest request) {
         String message = body.get("message");
         if (message == null || message.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Message is required"));
         }
 
-        return ResponseEntity.ok(Map.of("success", true, "message", ticketService.replyToTicket(ticketId, "SUPER_ADMIN", message)));
+        var reply = ticketService.replyToTicket(ticketId, "SUPER_ADMIN", message);
+        managementService.recordAuditEvent(
+                "Super Admin",
+                "Super Admin",
+                "Ticket Reply",
+                "Ticket",
+                ticketId,
+                "Replied to support ticket",
+                clientIp(request),
+                "Local Ticket");
+        return ResponseEntity.ok(Map.of("success", true, "message", reply));
     }
 
     @PatchMapping("/{ticketId}/status")
-    public ResponseEntity<?> updateStatus(@PathVariable String ticketId, @RequestBody Map<String, String> body) {
+    public ResponseEntity<?> updateStatus(@PathVariable String ticketId, @RequestBody Map<String, String> body,
+                                          jakarta.servlet.http.HttpServletRequest request) {
         String newStatus = body.get("status");
         if (newStatus == null || newStatus.trim().isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("success", false, "message", "Status is required"));
         }
 
-        return ResponseEntity.ok(Map.of("success", true, "ticket", ticketService.updateTicketStatus(ticketId, newStatus)));
+        Ticket ticket = ticketService.updateTicketStatus(ticketId, newStatus);
+        managementService.recordAuditEvent(
+                "Super Admin",
+                "Super Admin",
+                "Ticket Status Update",
+                "Ticket",
+                ticketId,
+                "Updated ticket status to " + newStatus.toUpperCase(),
+                clientIp(request),
+                "Local Ticket");
+        return ResponseEntity.ok(Map.of("success", true, "ticket", ticket));
+    }
+
+    private String clientIp(jakarta.servlet.http.HttpServletRequest request) {
+        if (request == null) return "unknown";
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
+        }
+        return request.getRemoteAddr();
     }
 }

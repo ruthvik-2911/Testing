@@ -53,11 +53,13 @@ public class AdminRegistrationController {
             @RequestParam(value = "countryCode", required = false) String countryCode,
             @RequestParam("emailId") String emailId,
             @RequestParam("password") String password,
+            @RequestParam(value = "companyId", required = false) String companyId,
             @RequestParam(value = "gstCertificate", required = false) MultipartFile gstCertificate,
             @RequestParam("companyRegistrationDoc") MultipartFile companyRegistrationDoc,
             @RequestParam("idProof") MultipartFile idProof) {
         try {
-            // Mobilize-only: upload docs to S3, then store full payload in Mobilize "companies"
+            // Mobilize-only: upload docs to S3, then store full payload in Mobilize
+            // "companies"
             String idSuffix = emailId.replaceAll("[^a-zA-Z0-9]", "_");
 
             String gstUrl = "";
@@ -68,6 +70,9 @@ public class AdminRegistrationController {
             String idProofUrl = fileStorageService.uploadFile(idProof, idSuffix + "/id");
 
             Map<String, Object> mobilizePayload = new java.util.LinkedHashMap<>();
+            if (companyId != null && !companyId.isBlank()) {
+                mobilizePayload.put("companyId", companyId);
+            }
             mobilizePayload.put("companyName", companyName);
             mobilizePayload.put("companyType", companyType != null ? companyType : "PRODUCTS_SERVICES");
             mobilizePayload.put("authorizedPerson", authorizedPerson);
@@ -90,8 +95,8 @@ public class AdminRegistrationController {
             mobilizePayload.put("submittedAt", Instant.now().toString());
             mobilizePayload.put("source", "KELIRI_ADMIN_PORTAL");
 
-            String companyId = mobilizeApiService.upsertKeliriAdminRegistrationCompany(mobilizePayload);
-            if (companyId == null) {
+            String mobilizeId = mobilizeApiService.upsertKeliriAdminRegistrationCompany(mobilizePayload);
+            if (mobilizeId == null) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                         .body(Map.of("success", false, "message", "Failed to save registration in Mobilize database"));
             }
@@ -99,7 +104,7 @@ public class AdminRegistrationController {
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "Registration submitted successfully. Awaiting approval.",
-                    "companyId", companyId));
+                    "companyId", mobilizeId));
         } catch (software.amazon.awssdk.services.s3.model.S3Exception e) {
             System.err.println("[AdminRegistrationController] S3 Error: " + e.awsErrorDetails().errorMessage());
             e.printStackTrace();
@@ -127,7 +132,8 @@ public class AdminRegistrationController {
                     "rejectionReason", reg.getRejectionReason() != null ? reg.getRejectionReason() : ""));
         }
 
-        // 2) If already approved and promoted to an active local admin user, return success too.
+        // 2) If already approved and promoted to an active local admin user, return
+        // success too.
         var userOpt = usersRepository.findByEmailAddress(email);
         if (userOpt.isPresent()) {
             var user = userOpt.get();
@@ -140,7 +146,8 @@ public class AdminRegistrationController {
                     "rejectionReason", ""));
         }
 
-        // 3) Fallback: check Mobilize companies (unified DB). Mobilize uses boolean `status`.
+        // 3) Fallback: check Mobilize companies (unified DB). Mobilize uses boolean
+        // `status`.
         List<Map> companies = mobilizeApiService.fetchAllCompaniesDirectly();
         Map<?, ?> company = companies.stream()
                 .filter(c -> c != null && email.equalsIgnoreCase(String.valueOf(((Map) c).get("email"))))
@@ -149,16 +156,11 @@ public class AdminRegistrationController {
                 .orElse(null);
 
         if (company != null) {
-            Object statusObj = company.get("status");
-            boolean isActive = statusObj instanceof Boolean
-                    ? (Boolean) statusObj
-                    : Boolean.parseBoolean(String.valueOf(statusObj));
-
             String companyName = String.valueOf(company.get("name"));
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "status", isActive ? "APPROVED" : "PENDING",
-                    "companyName", companyName != null ? companyName : "",
+                    "status", "PENDING",
+                    "companyName", companyName != null && !"null".equals(companyName) ? companyName : "",
                     "submittedAt", Instant.now(),
                     "rejectionReason", ""));
         }

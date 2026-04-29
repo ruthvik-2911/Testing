@@ -52,11 +52,17 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {message.attachments && message.attachments.length > 0 && (
           <div className={cn("flex flex-wrap gap-2 mt-2", isSupport ? "justify-start" : "justify-end")}>
             {message.attachments.map((file, i) => (
-              <div key={i} className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-blue-500/30 transition-all cursor-pointer group">
+              <a
+                key={i}
+                href={file.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-3 py-2 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-700 hover:border-blue-500/30 transition-all cursor-pointer group"
+              >
                 <FileText className="w-4 h-4 text-blue-500" />
                 <span className="text-[10px] font-bold text-gray-700 dark:text-gray-300 truncate max-w-[120px]">{file.name}</span>
                 <ExternalLink className="w-3 h-3 text-gray-400 group-hover:text-blue-500" />
-              </div>
+              </a>
             ))}
           </div>
         )}

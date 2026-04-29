@@ -7,6 +7,7 @@ interface Message {
   text: string;
   timestamp: string;
   isMe: boolean;
+  attachments?: { name: string; url: string }[];
 }
 
 interface TicketThreadProps {
@@ -38,6 +39,22 @@ const TicketThread: React.FC<TicketThreadProps> = ({ messages }) => {
           >
             {message.text}
           </div>
+
+          {message.attachments && message.attachments.length > 0 && (
+            <div className={`mt-2 flex flex-wrap gap-2 ${message.isMe ? 'justify-end' : 'justify-start'}`}>
+              {message.attachments.map((file, index) => (
+                <a
+                  key={index}
+                  href={file.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-xl border border-gray-200 bg-gray-50 text-xs font-bold text-primary-600 hover:underline"
+                >
+                  {file.name}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       ))}
       

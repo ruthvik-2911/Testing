@@ -1,5 +1,7 @@
+import axios from 'axios'
 import { api } from './api'
 import type { Ticket, Message, TicketStatus, TicketCategory } from "../types/ticket"
+import { ADMIN_BACKEND_URL } from '../config/constants'
 
 const formatStatus = (str: string): TicketStatus => {
   if (!str) return 'Open';
@@ -65,7 +67,12 @@ export const getTicketById = async (id: string): Promise<Ticket | null> => {
         id: m.id,
         sender: m.senderType === 'ADMIN' ? 'Admin' : 'Super Admin',
         content: m.message,
-        timestamp: m.createdAt
+        timestamp: m.createdAt,
+        attachments: (m.attachmentUrls || (m.attachmentUrl ? [m.attachmentUrl] : [])).map((url: string, index: number) => ({
+          name: `Attachment ${index + 1}`,
+          url,
+          type: 'file'
+        }))
       }))
     }
   } catch (error) {
@@ -74,11 +81,20 @@ export const getTicketById = async (id: string): Promise<Ticket | null> => {
   }
 }
 
-export const createTicket = async (data: { subject: string; category: TicketCategory; description: string }): Promise<Ticket> => {
-  const response = await api.post('/api/admin/tickets', {
-    subject: data.subject,
-    category: data.category.toUpperCase().replace(' ISSUE', '').replace(' ', '_'),
-    message: data.description
+export const createTicket = async (
+  data: { subject: string; category: TicketCategory; description: string },
+  attachments: File[] = []
+): Promise<Ticket> => {
+  const formData = new FormData()
+  formData.append('subject', data.subject)
+  formData.append('category', data.category.toUpperCase().replace(' ISSUE', '').replace(' ', '_'))
+  formData.append('message', data.description)
+  attachments.forEach((file) => formData.append('attachments', file))
+
+  const token = localStorage.getItem('admin_token')
+  const response = await axios.post(`${ADMIN_BACKEND_URL}/api/admin/tickets`, formData, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    timeout: 30000,
   })
   const t = response.data.ticket
   return {

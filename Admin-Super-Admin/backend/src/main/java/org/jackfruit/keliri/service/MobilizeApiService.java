@@ -109,9 +109,11 @@ public class MobilizeApiService {
     }
 
     /**
-     * Creates/updates a Mobilize "companies" record with Keliri admin registration details.
+     * Creates/updates a Mobilize "companies" record with Keliri admin registration
+     * details.
      *
-     * We store the full form payload under `keliriRegistration` to avoid guessing / breaking
+     * We store the full form payload under `keliriRegistration` to avoid guessing /
+     * breaking
      * Mobilize's native schema.
      *
      * @return the company document id/uid (best-effort)
@@ -119,12 +121,28 @@ public class MobilizeApiService {
     public String upsertKeliriAdminRegistrationCompany(Map<String, Object> payload) {
         try {
             String email = payload.get("email") != null ? String.valueOf(payload.get("email")) : null;
+            String companyId = payload.get("companyId") != null ? String.valueOf(payload.get("companyId")) : null;
+            
             if (email == null || email.isBlank()) {
                 throw new IllegalArgumentException("email is required");
             }
 
-            Query q = new Query(Criteria.where("email").is(email));
-            Map existing = mongoTemplate.findOne(q, Map.class, "companies");
+            Map existing = null;
+            if (companyId != null && !companyId.isBlank()) {
+                // Priority 1: Look up by Company ID (for Joining Existing Company)
+                try {
+                    Query qId = new Query(Criteria.where("_id").is(new ObjectId(companyId)));
+                    existing = mongoTemplate.findOne(qId, Map.class, "companies");
+                } catch (Exception e) {
+                    System.err.println("Invalid companyId format: " + companyId);
+                }
+            }
+
+            if (existing == null) {
+                // Priority 2: Look up by Email (for New Registrations or fallback)
+                Query qEmail = new Query(Criteria.where("email").is(email));
+                existing = mongoTemplate.findOne(qEmail, Map.class, "companies");
+            }
 
             if (existing == null) {
                 Map<String, Object> doc = new LinkedHashMap<>();
@@ -147,7 +165,8 @@ public class MobilizeApiService {
             // Update
             existing.put("updatedAt", new Date());
             existing.put("name", payload.getOrDefault("companyName", existing.getOrDefault("name", "")));
-            existing.put("companyType", payload.getOrDefault("companyType", existing.getOrDefault("companyType", "PRODUCTS_SERVICES")));
+            existing.put("companyType",
+                    payload.getOrDefault("companyType", existing.getOrDefault("companyType", "PRODUCTS_SERVICES")));
             existing.put("keliriRegistration", payload);
 
             mongoTemplate.save(existing, "companies");
@@ -249,6 +268,194 @@ public class MobilizeApiService {
         } catch (Exception e) {
             System.err.println("Error updating company status directly in DB: " + e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Fetches dashboard statistics from Mobilize MongoDB collections
+     */
+    public Map<String, Object> fetchDashboardStats() {
+        try {
+            Map<String, Object> stats = new HashMap<>();
+            
+            // Get counts from various collections
+            long campaignsCount = mongoTemplate.getCollection("ad_campaigns").countDocuments();
+            long advertisementsCount = mongoTemplate.getCollection("advertisements").countDocuments();
+            long companiesCount = mongoTemplate.getCollection("companies").countDocuments();
+            long usersCount = mongoTemplate.getCollection("users").countDocuments();
+            
+            // Count active campaigns
+            Query activeCampaignsQuery = new Query(Criteria.where("compaignsStatus").is("ACTIVE"));
+            long activeCampaignsCount = mongoTemplate.count(activeCampaignsQuery, "ad_campaigns");
+            
+            // Count inactive campaigns
+            Query inactiveCampaignsQuery = new Query(Criteria.where("compaignsStatus").is("INACTIVE"));
+            long inactiveCampaignsCount = mongoTemplate.count(inactiveCampaignsQuery, "ad_campaigns");
+            
+            // Count draft campaigns
+            Query draftCampaignsQuery = new Query(Criteria.where("compaignsStatus").is("DRAFT"));
+            long draftCampaignsCount = mongoTemplate.count(draftCampaignsQuery, "ad_campaigns");
+            
+            // Count completed campaigns
+            Query completedCampaignsQuery = new Query(Criteria.where("compaignsStatus").is("COMPLETED"));
+            long completedCampaignsCount = mongoTemplate.count(completedCampaignsQuery, "ad_campaigns");
+            
+            // Count publishers (from users and companies collections in Mobilize)
+            Criteria publisherCriteria = new Criteria().orOperator(
+                Criteria.where("role").is("publisher"),
+                Criteria.where("role").is("PUBLISHER"),
+                Criteria.where("userType").is("publisher"),
+                Criteria.where("userType").is("PUBLISHER")
+            );
+            Query publishersQuery = new Query(publisherCriteria);
+            long publishersFromUsers = mongoTemplate.count(publishersQuery, "users");
+            
+            // Count from companies collection (publishers are stored as companies)
+            long publishersFromCompaniesColl = mongoTemplate.count(new Query(), "companies");
+            
+            long publishersCount = publishersFromUsers + publishersFromCompaniesColl;
+            
+            System.out.println(">>> PUBLISHER COUNT: " + publishersCount + " (users: " + publishersFromUsers + ", companies_coll: " + publishersFromCompaniesColl + ")");
+            
+            // Count consumers (handle both cases)
+            Criteria consumerCriteria = new Criteria().orOperator(
+                Criteria.where("role").is("consumer"),
+                Criteria.where("role").is("CONSUMER"),
+                Criteria.where("userType").is("consumer"),
+                Criteria.where("userType").is("CONSUMER")
+            );
+            Query consumersQuery = new Query(consumerCriteria);
+            long consumersCount = mongoTemplate.count(consumersQuery, "users");
+            
+            // Count admins (handle both cases)
+            Criteria adminCriteria = new Criteria().orOperator(
+                Criteria.where("role").is("admin"),
+                Criteria.where("role").is("ADMIN"),
+                Criteria.where("role").is("BACKOFFICE"),
+                Criteria.where("userType").is("admin"),
+                Criteria.where("userType").is("ADMIN")
+            );
+            Query adminsQuery = new Query(adminCriteria);
+            long adminsCount = mongoTemplate.count(adminsQuery, "users");
+            
+            // Build stats map
+            Map<String, Object> campaignStats = new HashMap<>();
+            campaignStats.put("campaigns", campaignsCount);
+            campaignStats.put("activeCampaigns", activeCampaignsCount);
+            campaignStats.put("inactiveCampaigns", inactiveCampaignsCount);
+            campaignStats.put("draftCampaigns", draftCampaignsCount);
+            campaignStats.put("completedCampaigns", completedCampaignsCount);
+            
+            stats.put("campaign", campaignStats);
+            stats.put("advertisement", advertisementsCount);
+            stats.put("companies", companiesCount);
+            stats.put("publishers", publishersCount);
+            stats.put("consumers", consumersCount);
+            stats.put("users", adminsCount);
+            
+            System.out.println(">>> MONGODB DASHBOARD STATS:");
+            System.out.println("  Campaigns: " + campaignsCount);
+            System.out.println("  Active Campaigns: " + activeCampaignsCount);
+            System.out.println("  Advertisements: " + advertisementsCount);
+            System.out.println("  Companies: " + companiesCount);
+            System.out.println("  Publishers: " + publishersCount);
+            System.out.println("  Consumers: " + consumersCount);
+            
+            return stats;
+            
+        } catch (Exception e) {
+            System.err.println("!!! Error fetching dashboard stats from MongoDB: " + e.getMessage());
+            return new HashMap<>();
+        }
+    }
+
+    /**
+     * Fetches all campaigns DIRECTLY from the Mobilize MongoDB 'ad_campaigns'
+     * collection.
+     */
+    public List<Map<String, Object>> fetchCampaignsFromMobilize() {
+        try {
+            List<Map> raw = mongoTemplate.findAll(Map.class, "ad_campaigns");
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Map m : raw) {
+                result.add((Map<String, Object>) m);
+            }
+            System.out.println(">>> MONGO CAMPAIGNS COUNT: " + result.size());
+            return result;
+        } catch (Exception e) {
+            System.err.println("!!! Error fetching campaigns from MongoDB: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Fetches all advertisements DIRECTLY from the Mobilize MongoDB 'advertisements'
+     * collection.
+     */
+    public List<Map<String, Object>> fetchAdvertisementsFromMobilize() {
+        try {
+            List<Map> raw = mongoTemplate.findAll(Map.class, "advertisements");
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Map m : raw) {
+                result.add((Map<String, Object>) m);
+            }
+            System.out.println(">>> MONGO ADVERTISEMENTS COUNT: " + result.size());
+            return result;
+        } catch (Exception e) {
+            System.err.println("!!! Error fetching advertisements from MongoDB: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Fetches all companies DIRECTLY from the Mobilize MongoDB 'companies'
+     * collection.
+     */
+    public List<Map<String, Object>> fetchCompaniesFromMobilize() {
+        try {
+            List<Map> raw = mongoTemplate.findAll(Map.class, "companies");
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Map m : raw) {
+                result.add((Map<String, Object>) m);
+            }
+            System.out.println(">>> MONGO COMPANIES COUNT: " + result.size());
+            return result;
+        } catch (Exception e) {
+            System.err.println("!!! Error fetching companies from MongoDB: " + e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Find company dynamically by name or ID
+     */
+    public Map<String, Object> findCompanyDynamic(String identifier) {
+        try {
+            // Try to find by name first
+            Query nameQuery = new Query(Criteria.where("name").is(identifier));
+            Map<String, Object> company = mongoTemplate.findOne(nameQuery, Map.class, "companies");
+            
+            if (company == null) {
+                // Try to find by uid
+                Query uidQuery = new Query(Criteria.where("uid").is(identifier));
+                company = mongoTemplate.findOne(uidQuery, Map.class, "companies");
+            }
+            
+            if (company == null) {
+                // Try to find by _id
+                try {
+                    ObjectId objectId = new ObjectId(identifier);
+                    Query idQuery = new Query(Criteria.where("_id").is(objectId));
+                    company = mongoTemplate.findOne(idQuery, Map.class, "companies");
+                } catch (Exception e) {
+                    // Invalid ObjectId format, ignore
+                }
+            }
+            
+            return company;
+        } catch (Exception e) {
+            System.err.println("!!! Error finding company: " + e.getMessage());
+            return null;
         }
     }
 }

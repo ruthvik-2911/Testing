@@ -5,7 +5,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.Instant;
 
-@Document(collection = "publishers")
+@Document(collection = "companies")
 public class Publisher {
 
     @Id

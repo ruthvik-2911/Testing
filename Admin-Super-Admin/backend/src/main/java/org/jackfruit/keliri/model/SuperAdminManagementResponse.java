@@ -358,6 +358,8 @@ public class SuperAdminManagementResponse {
         private String to;
         private String content;
         private String timestamp;
+        private String type;
+        private String priority;
 
         public String getId() {
             return id;
@@ -397,6 +399,22 @@ public class SuperAdminManagementResponse {
 
         public void setTimestamp(String timestamp) {
             this.timestamp = timestamp;
+        }
+
+        public String getType() {
+            return type;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public String getPriority() {
+            return priority;
+        }
+
+        public void setPriority(String priority) {
+            this.priority = priority;
         }
     }
 
@@ -755,6 +773,7 @@ public class SuperAdminManagementResponse {
         private String entityId;
         private String action;
         private String ip;
+        private String dataSource;
 
         public String getId() {
             return id;
@@ -826,6 +845,14 @@ public class SuperAdminManagementResponse {
 
         public void setIp(String ip) {
             this.ip = ip;
+        }
+
+        public String getDataSource() {
+            return dataSource;
+        }
+
+        public void setDataSource(String dataSource) {
+            this.dataSource = dataSource;
         }
     }
 

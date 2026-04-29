@@ -94,7 +94,11 @@ const Tickets = () => {
                     sender: m.senderType === 'SUPER_ADMIN' ? 'Super Admin' : 'Admin',
                     text: m.message,
                     timestamp: new Date(m.createdAt).toLocaleString(),
-                    isMe: m.senderType === 'SUPER_ADMIN'
+                    isMe: m.senderType === 'SUPER_ADMIN',
+                    attachments: (m.attachmentUrls || (m.attachmentUrl ? [m.attachmentUrl] : [])).map((url: string, index: number) => ({
+                        name: `Attachment ${index + 1}`,
+                        url
+                    }))
                 }));
                 setSelectedTicket(prev => prev ? { ...prev, messages: activeMsgs } : null);
             }

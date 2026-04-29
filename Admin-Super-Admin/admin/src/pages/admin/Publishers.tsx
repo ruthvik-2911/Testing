@@ -1,6 +1,6 @@
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
-import { Building2, Plus, Bell, ChevronDown, Moon, Sun } from "lucide-react"
+import { Building2, Plus, Bell, ChevronDown } from "lucide-react"
 import { PublisherFilters } from "../../components/publisher/PublisherFilters"
 import { PublisherTable } from "../../components/publisher/PublisherTable"
 import { Modal } from "../../components/ui/Modal"
@@ -24,25 +24,18 @@ export default function Publishers() {
   const [selectedPublisher, setSelectedPublisher] = React.useState<{id: string, name: string, isCurrentlyActive: boolean} | null>(null)
   const [isToggling, setIsToggling] = React.useState(false)
 
-  // Dark mode state
-  const [isDarkMode, setIsDarkMode] = React.useState(false)
-
-  React.useEffect(() => {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setIsDarkMode(true)
-      document.documentElement.classList.add('dark')
-    }
-  }, [])
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode)
-    document.documentElement.classList.toggle('dark')
-  }
-
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
-      const response = await fetchPublishers({ page, limit, search: searchTerm, status: statusFilter })
+      // Get company UID from session
+      let companyUID = undefined;
+      const userStr = localStorage.getItem('admin_user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        companyUID = user.companyUID || user.companyId || user.uid;
+      }
+
+      const response = await fetchPublishers({ page, limit, search: searchTerm, status: statusFilter, companyUID })
       setData(response.data)
       setTotalItems(response.totalItems)
     } catch (error) {
@@ -102,13 +95,6 @@ export default function Publishers() {
             </div>
             
             <div className="flex items-center gap-4">
-              <button 
-                onClick={toggleDarkMode}
-                className="p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 transition-colors"
-                aria-label="Toggle dark mode"
-              >
-                {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-              </button>
               <button className="p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 relative transition-colors">
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-[#1C1F26]"></span>

@@ -35,6 +35,9 @@ import com.razorpay.RazorpayException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
 
 @Service
 public class SuperAdminManagementService {
@@ -51,6 +54,7 @@ public class SuperAdminManagementService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final RazorpayClient razorpayClient;
     private final org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder passwordEncoder = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder();
+    private final MongoTemplate mongoTemplate;
 
     private final List<SuperAdminManagementResponse.EmailNotificationRecord> emailNotifications = new CopyOnWriteArrayList<>();
     private final List<SuperAdminManagementResponse.AuditLogRecord> actionAuditLogs = new CopyOnWriteArrayList<>();
@@ -67,7 +71,8 @@ public class SuperAdminManagementService {
             PublisherRepository publisherRepository,
             PaymentTransactionRepository paymentTransactionRepository,
             RazorpayClient razorpayClient,
-            MobilizeApiService mobilizeApiService) {
+            MobilizeApiService mobilizeApiService,
+            MongoTemplate mongoTemplate) {
         this.usersRepository = usersRepository;
         this.campaignsRepository = campaignsRepository;
         this.advertisementsRepository = advertisementsRepository;
@@ -78,29 +83,27 @@ public class SuperAdminManagementService {
         this.paymentTransactionRepository = paymentTransactionRepository;
         this.razorpayClient = razorpayClient;
         this.mobilizeApiService = mobilizeApiService;
+        this.mongoTemplate = mongoTemplate;
     }
 
     public List<SuperAdminManagementResponse.AdminRecord> getAdmins(String search, String status) {
         List<SuperAdminManagementResponse.AdminRecord> admins = new ArrayList<>();
 
-        // 1. Get real admins (Active/Suspended) from local DB
-        List<SuperAdminManagementResponse.AdminRecord> activeAdmins = usersRepository.findbygivendor().stream()
+        // 1. Get real admins (Active/Suspended) from local DB using direct query
+        Criteria adminCriteria = new Criteria().orOperator(
+                Criteria.where("userType").is("admin"),
+                Criteria.where("userType").is("ADMIN"),
+                Criteria.where("role").is("admin"),
+                Criteria.where("role").is("ADMIN"));
+        Query adminQuery = new Query(adminCriteria);
+        List<users> adminUsers = mongoTemplate.find(adminQuery, users.class);
+
+        List<SuperAdminManagementResponse.AdminRecord> activeAdmins = adminUsers.stream()
                 .map(this::toAdminRecord)
                 .toList();
         admins.addAll(activeAdmins);
 
-        // 2. Get pending/rejected registrations from Mobilize DB directly (to avoid API
-        // filtering)
-        List<Map> allCompanies = mobilizeApiService.fetchAllCompaniesDirectly();
-        for (Map company : allCompanies) {
-            String email = (String) company.get("email");
-            if (activeAdmins.stream().anyMatch(a -> Objects.equals(a.getEmail(), email)))
-                continue;
-
-            admins.add(mobilizeCompanyToAdminRecord((Map<String, Object>) company));
-        }
-
-        // 3. Get registrations from admin_registrations collection
+        // 2. Get registrations from admin_registrations collection
         List<org.jackfruit.keliri.model.AdminRegistration> regs = registrationRepository.findAll();
         for (org.jackfruit.keliri.model.AdminRegistration reg : regs) {
             if (admins.stream().anyMatch(a -> Objects.equals(a.getEmail(), reg.getEmailId())))
@@ -116,8 +119,16 @@ public class SuperAdminManagementService {
     }
 
     public SuperAdminManagementResponse.AdminDetail getAdminDetail(String adminId) {
-        // Try finding in local active users first
-        users admin = usersRepository.findbygivendor().stream()
+        // Try finding in local active users using direct query
+        Criteria adminCriteria = new Criteria().orOperator(
+                Criteria.where("userType").is("admin"),
+                Criteria.where("userType").is("ADMIN"),
+                Criteria.where("role").is("admin"),
+                Criteria.where("role").is("ADMIN"));
+        Query adminQuery = new Query(adminCriteria);
+        List<users> adminUsers = mongoTemplate.find(adminQuery, users.class);
+
+        users admin = adminUsers.stream()
                 .filter(user -> Objects.equals(user.getId(), adminId))
                 .findFirst()
                 .orElse(null);
@@ -220,18 +231,21 @@ public class SuperAdminManagementService {
     }
 
     private String stringOrEmpty(Object value) {
-        if (value == null) return "";
+        if (value == null)
+            return "";
         String s = String.valueOf(value);
         return s == null ? "" : s;
     }
 
     private String stringOrNull(Object value) {
-        if (value == null) return null;
+        if (value == null)
+            return null;
         return String.valueOf(value);
     }
 
     private String firstNonBlank(String... values) {
-        if (values == null) return null;
+        if (values == null)
+            return null;
         for (String value : values) {
             if (value != null && !value.isBlank()) {
                 return value;
@@ -360,7 +374,8 @@ public class SuperAdminManagementService {
             return applyAdminAction(adminId, "Suspended", null, null, null, "Account");
         }
 
-        // 2) If adminId comes from Mobilize "companies" dataset, suspend via Mobilize API
+        // 2) If adminId comes from Mobilize "companies" dataset, suspend via Mobilize
+        // API
         Map<String, Object> company = (Map<String, Object>) (Map) mobilizeApiService.fetchAllCompaniesDirectly()
                 .stream()
                 .filter(c -> Objects.equals(String.valueOf(c.get("uid")), adminId)
@@ -389,7 +404,8 @@ public class SuperAdminManagementService {
             return applyAdminAction(adminId, "Active", null, null, null, "Account");
         }
 
-        // 2) If adminId comes from Mobilize "companies" dataset, reinstate via Mobilize API
+        // 2) If adminId comes from Mobilize "companies" dataset, reinstate via Mobilize
+        // API
         Map<String, Object> company = (Map<String, Object>) (Map) mobilizeApiService.fetchAllCompaniesDirectly()
                 .stream()
                 .filter(c -> Objects.equals(String.valueOf(c.get("uid")), adminId)
@@ -482,9 +498,15 @@ public class SuperAdminManagementService {
             record.setClicks(clicks);
             record.setEngagement(engagement);
 
-            // Allow status override from new publisher DB, fallback to campaign logic
-            if (publisher.getStatus() != null && "INACTIVE".equalsIgnoreCase(publisher.getStatus())) {
-                record.setStatus("Inactive");
+            // Use actual publisher status from database first, fallback to campaign logic
+            if (publisher.getStatus() != null) {
+                if ("ACTIVE".equalsIgnoreCase(publisher.getStatus())) {
+                    record.setStatus("Active");
+                } else if ("INACTIVE".equalsIgnoreCase(publisher.getStatus())) {
+                    record.setStatus("Inactive");
+                } else {
+                    record.setStatus(resolvePublisherStatus(publisherCampaigns));
+                }
             } else {
                 record.setStatus(resolvePublisherStatus(publisherCampaigns));
             }
@@ -802,7 +824,11 @@ public class SuperAdminManagementService {
         record.setEmail(defaultString(user.getEmailAddress(), "not-available@keliri.com"));
         record.setCompany(resolveCompanyName(user));
         record.setRegisteredDate(resolveDateFromObjectId(user.getId()));
-        record.setStatus(defaultString(user.getAccountStatus(), "Active"));
+        String rawStatus = defaultString(user.getAccountStatus(), "Active");
+        String normalizedStatus = rawStatus.isEmpty() ? "Active"
+                : rawStatus.substring(0, 1).toUpperCase(java.util.Locale.ENGLISH)
+                        + rawStatus.substring(1).toLowerCase(java.util.Locale.ENGLISH);
+        record.setStatus(normalizedStatus);
         record.setPhone(resolvePhone(user));
         return record;
     }
@@ -956,6 +982,22 @@ public class SuperAdminManagementService {
         if (actionAuditLogs.size() > 1000) {
             actionAuditLogs.remove(actionAuditLogs.size() - 1);
         }
+    }
+
+    /**
+     * Compatibility method for older controllers.
+     */
+    public void recordAuditEvent(
+            String actorName,
+            String actorRole,
+            String actionType,
+            String entityType,
+            String entityId,
+            String action,
+            String ip,
+            String platform) {
+        // We ignore the platform argument in this implementation
+        addAuditLog(actorName, actorRole, actionType, entityType, entityId, action, ip);
     }
 
     private String resolvePublisherStatus(List<ad_campaigns> campaigns) {
@@ -1250,9 +1292,11 @@ public class SuperAdminManagementService {
         Object statusObj = company.get("status");
         boolean isActive = statusObj instanceof Boolean ? (Boolean) statusObj
                 : Boolean.parseBoolean(statusObj.toString());
-        // Mobilize uses boolean status; in our Super Admin UI we treat status=false as Suspended
-        // (pending registrations are tracked separately via admin_registrations / local flows).
-        record.setStatus(isActive ? "Active" : "Suspended");
+        // Since we are falling back to the mobilize collection for admins that don't
+        // have
+        // local user accounts yet, their admin portal status is always "Pending",
+        // regardless of whether their ad company status is active or not.
+        record.setStatus("Pending");
 
         if (primaryContact != null && primaryContact.get("phoneNumber") != null) {
             Map phone = (Map) primaryContact.get("phoneNumber");

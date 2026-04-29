@@ -58,6 +58,7 @@ export default function Dashboard() {
   const [visibleIds, setVisibleIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [lastUpdated, setLastUpdated] = useState(new Date())
 
   useEffect(() => {
     let cancelled = false
@@ -71,6 +72,7 @@ export default function Dashboard() {
         if (cancelled) return
         setDashboard(payload)
         setVisibleIds(loadVisibility(payload.kpis))
+        setLastUpdated(new Date())
       } catch (err) {
         if (cancelled) return
         if (err instanceof AuthError) {
@@ -86,8 +88,13 @@ export default function Dashboard() {
     }
 
     loadDashboard()
+    
+    // Auto-refresh every 30 seconds for real-time dashboard
+    const interval = setInterval(loadDashboard, 30000)
+    
     return () => {
       cancelled = true
+      clearInterval(interval)
     }
   }, [])
 
@@ -157,7 +164,7 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Live view of how Keliri campaigns are being published and targeted • {today}
+            Live view of how Keliri campaigns are being published and targeted • {today} • Last updated: {lastUpdated.toLocaleTimeString()}
           </p>
         </div>
 

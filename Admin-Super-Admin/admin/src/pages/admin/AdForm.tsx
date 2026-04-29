@@ -58,6 +58,7 @@ export default function AdForm() {
   const adType = watch("type")
 
   const [isUploading, setIsUploading] = React.useState(false)
+  const [isPublishing, setIsPublishing] = React.useState(false)
   const uploadedMedia = React.useRef({
     imageAdFile: null as File | null,
     imageAdUID: "",
@@ -117,9 +118,6 @@ export default function AdForm() {
         errors.banner = "At least 1 banner image is required."
       } else if (mediaState.bannerFiles.length > 4) {
         errors.banner = "Maximum 4 banner images allowed."
-      }
-      if (!mediaState.imageAd) {
-        errors.imageAd = "An Image Ad is required for Banner ads."
       }
     } else if (adType === "Image Ad") {
       if (!mediaState.imageAd) {
@@ -213,24 +211,22 @@ export default function AdForm() {
       }
 
       const adminUserStr = localStorage.getItem('admin_user')
-      let adminCompanyName = undefined
       let extractedCompanyUID = undefined
 
       if (adminUserStr) {
         try {
           const user = JSON.parse(adminUserStr)
-          adminCompanyName = user.companyName
-        } catch(e) {}
+          // Prioritize the actual UID/ID from the session
+          extractedCompanyUID = user.companyUID || user.companyId || user.uid
+        } catch(e) {
+          console.error("Failed to parse admin user from session", e)
+        }
       }
 
-      try {
-        // We must provide a valid Node backend companyUID, not the Spring Boot ID
-        const { fetchCompanies } = await import("../../services/ads")
-        const companiesList = await fetchCompanies()
-        const match = companiesList.find(c => c.name === adminCompanyName)
-        extractedCompanyUID = match ? match.uid : companiesList[0]?.uid
-      } catch (e) {
-        console.warn("Could not fetch companies for UID resolution", e)
+      // If companyUID is still missing, BLOCK submission — DO NOT create without a company.
+      if (!extractedCompanyUID) {
+        toast.error('Session expired or company not found. Please log out and log back in.', { id: uploadToast });
+        return;
       }
 
       const payload = {
@@ -238,7 +234,9 @@ export default function AdForm() {
         description: data.description,
         type: data.type,
         companyUID: extractedCompanyUID,
-        imageAdUID: uploadedMedia.current.imageAdUID || undefined,
+        imageAdUID: (data.type === "Banner" && uploadedMedia.current.bannerUIDs.length > 0) 
+          ? uploadedMedia.current.bannerUIDs[0] 
+          : (uploadedMedia.current.imageAdUID || undefined),
         bannerUIDs: uploadedMedia.current.bannerUIDs,
         videoUID: uploadedMedia.current.videoUID || undefined,
         videoUrl,
@@ -266,20 +264,12 @@ export default function AdForm() {
       }
 
       if (shouldPublish && savedAdId) {
-        toast.loading("Publishing campaign…", { id: uploadToast })
-        await finalizeAdPublication(savedAdId, {
-          startDate: new Date().toISOString(),
-          endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          latitude: data.latitude,
-          longitude: data.longitude,
-          radiusKm: data.radius,
-        })
-        toast.success("Ad published as campaign!", { id: uploadToast, icon: "🚀" })
+        toast.success("Ad saved! Proceeding to publish configuration...", { id: uploadToast })
+        setTimeout(() => navigate(`/admin/ads/${savedAdId}/publish`), 800)
       } else {
         toast.success(isEditMode ? "Draft successfully updated" : "Ad draft created successfully!", { id: uploadToast })
+        setTimeout(() => navigate("/admin/ads"), 800)
       }
-
-      setTimeout(() => navigate("/admin/ads"), 800)
     } catch (err) {
       toast.error("Failed to save advertisement")
     }
@@ -291,8 +281,14 @@ export default function AdForm() {
     if (isValid) await onSubmit(methods.getValues(), false)
   }
   const handlePublish = async () => {
-    const isValid = await trigger()
-    if (isValid) await onSubmit(methods.getValues(), true)
+    if (isPublishing) return
+    setIsPublishing(true)
+    try {
+      const isValid = await trigger()
+      if (isValid) await onSubmit(methods.getValues(), true)
+    } finally {
+      setIsPublishing(false)
+    }
   }
 
   const renderCurrentStep = () => {
@@ -383,7 +379,7 @@ export default function AdForm() {
                   type="button"
                   onClick={handleBack}
                   disabled={currentStep === 0 || isSubmitting || isUploading}
-                  className="px-6 py-2 text-gray-600 dark:text-gray-300 font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
+                  className="px-6 py-2 text-brand-500 hover:text-brand-600 font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-opacity"
                 >
                   Back
                 </button>
@@ -393,11 +389,11 @@ export default function AdForm() {
                     <button
                       type="button"
                       onClick={handlePublish}
-                      disabled={isSubmitting}
+                      disabled={isPublishing || isSubmitting || isUploading}
                       className="flex items-center gap-2 px-8 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-semibold shadow-sm shadow-brand-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                     >
-                      {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      Publish Campaign
+                      {isPublishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                      {isPublishing ? 'Publishing...' : 'Publish Campaign'}
                     </button>
                   </div>
                 ) : (
@@ -416,7 +412,7 @@ export default function AdForm() {
                       type="button"
                       onClick={handleNext}
                       disabled={isUploading}
-                      className="flex items-center gap-2 px-8 py-2.5 bg-gray-900 hover:bg-black dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-white rounded-lg text-sm font-semibold shadow-sm transition-all disabled:opacity-70 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 px-8 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-lg text-sm font-semibold shadow-sm shadow-brand-500/20 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
                     >
                       {isUploading && <Loader2 className="w-4 h-4 animate-spin" />}
                       {isUploading ? "Uploading..." : "Continue"}

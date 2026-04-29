@@ -19,7 +19,10 @@ public class SuperAdminAnalyticsController {
 
     @GetMapping
     public ResponseEntity<SuperAdminAnalyticsResponse> getAnalytics() {
-        return ResponseEntity.ok(analyticsService.getAnalytics());
+        System.out.println(">>> RECEIVED REQUEST: /api/superadmin/analytics");
+        SuperAdminAnalyticsResponse response = analyticsService.getAnalytics();
+        System.out.println("<<< RESPONDING WITH: " + response.getKpis().size() + " KPI cards");
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/revenue")

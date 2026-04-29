@@ -56,4 +56,6 @@ ArrayList<advertisements> showvendorsfindByCreatedBy(ObjectId id, int gitagnumbe
 
 @Query(value = "{'_id': { '$in': ?0 }}", fields = "{'_id':1,'title':1,'company':1,'adType':1}")
 List<advertisements> findDashboardAdsByIds(List<String> ids);
+	@Query(value = "{'uid': ?0}")
+	Optional<advertisements> findByUid(String uid);
 }

@@ -49,7 +49,8 @@ public class AdminPublisherController {
         try {
             String adminId = extractAdminId(authHeader);
             if (adminId == null) return unauthorized();
-            return ResponseEntity.ok(Map.of("success", true, "publishers", publisherRepository.findByAdminId(adminId)));
+            // Return all publishers instead of filtering by adminId
+            return ResponseEntity.ok(Map.of("success", true, "publishers", publisherRepository.findAll()));
         } catch (Exception e) {
             return serverError(e);
         }
@@ -348,6 +349,25 @@ public class AdminPublisherController {
                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
                 * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // ──────────────────────────────────────────────
+    // GET Publishers by Admin ID
+    // ──────────────────────────────────────────────
+    @GetMapping("/by-admin/{adminId}")
+    public ResponseEntity<?> getPublishersByAdminId(@PathVariable String adminId) {
+        try {
+            List<Publisher> publishers = publisherRepository.findByAdminId(adminId);
+            
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "data", publishers,
+                "total", publishers.size(),
+                "message", "Publishers retrieved successfully"
+            ));
+        } catch (Exception e) {
+            return serverError(e);
+        }
     }
 
     private String extractAdminId(String authHeader) {

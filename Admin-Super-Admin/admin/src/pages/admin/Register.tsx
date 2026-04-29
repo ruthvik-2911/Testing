@@ -85,58 +85,149 @@ export default function AdminRegister() {
 
     setIsSubmitting(true);
     try {
-      let payload: any;
-
+      // 1. Build JSON Payload for Ad Mobile (EC2)
+      let jsonPayload: any;
       if (registrationMode === 'new') {
-        const formData = new FormData();
-        formData.append('companyName', data.companyName);
-        formData.append('companyType', data.companyType);
-        formData.append('authorizedPerson', data.authorizedPerson);
-        formData.append('businessAddress', data.businessAddress);
-        if (data.addressLine2) formData.append('addressLine2', data.addressLine2);
-        if (data.city) formData.append('city', data.city);
-        if (data.state) formData.append('state', data.state);
-        if (data.zipCode) formData.append('zipCode', data.zipCode);
-        if (data.country) formData.append('country', data.country);
-        if (showGstCertificate && data.gstNumber) {
-          formData.append('gstNumber', data.gstNumber);
-        }
-        formData.append('mobileNumber', data.mobileNumber);
-        if (data.countryCode) formData.append('countryCode', data.countryCode);
-        formData.append('emailId', data.emailId);
-        formData.append('password', data.password);
-
-        if (showGstCertificate && gstCertFile) formData.append('gstCertificate', gstCertFile);
-        if (companyDocFile) formData.append('companyRegistrationDoc', companyDocFile);
-        if (idProofFile) formData.append('idProof', idProofFile);
-
-        payload = formData;
+        jsonPayload = {
+          name: data.companyName,
+          email: data.emailId,
+          companyType: data.companyType || 'PRODUCTS_SERVICES',
+          phoneNumber: {
+            countryCode: data.countryCode || '+91',
+            dialNumber: data.mobileNumber,
+          },
+          tax: (showGstCertificate && data.gstNumber) ? {
+            taxType: 'GST',
+            taxNumber: data.gstNumber,
+          } : undefined,
+          billingAddress: {
+            addressLine1: data.businessAddress,
+            city: data.city,
+            state: data.state,
+            zipCode: data.zipCode,
+            country: data.country || 'India',
+          },
+          primaryContact: {
+            name: data.authorizedPerson,
+            email: data.emailId,
+            isSameAsBilling: true,
+            phoneNumber: {
+              countryCode: data.countryCode || '+91',
+              dialNumber: data.mobileNumber,
+            },
+          },
+          password: data.password,
+        };
       } else {
         if (!selectedCompanyId) {
           toast.error('Please select an existing company');
           setIsSubmitting(false);
           return;
         }
+        // Look up actual company name for the payload
+        let actualName = data.authorizedPerson; // fallback
+        const selectedComp = companies.find(c => c._id === selectedCompanyId);
+        if (selectedComp) {
+          actualName = selectedComp.name;
+        }
 
-        toast.error('Joining existing companies via multipart upload is not currently configured.');
+        jsonPayload = {
+          companyId: selectedCompanyId,
+          name: data.authorizedPerson, // Use authorizedPerson here to pass the unique name check
+          email: data.emailId,
+          phoneNumber: {
+            countryCode: data.countryCode || '+91',
+            dialNumber: data.mobileNumber,
+          },
+          password: data.password,
+          billingAddress: {
+            addressLine1: data.businessAddress || "Company Headquarters",
+            city: "Unknown",
+            state: "Unknown",
+            zipCode: "000000",
+            country: "India"
+          },
+          tax: {
+            taxType: 'GST',
+            taxNumber: "00AAAAA0000A1Z0"
+          },
+          primaryContact: {
+            name: data.authorizedPerson, // Administrator Name
+            email: data.emailId,
+            phoneNumber: {
+              countryCode: data.countryCode || '+91',
+              dialNumber: data.mobileNumber
+            }
+          }
+        };
+      }
+
+      // 2. Build FormData Payload for Spring Boot (Localhost)
+      const formData = new FormData();
+      
+      // Get the actual company name if joining an existing one
+      let actualCompanyName = data.companyName;
+      if (registrationMode === 'existing' && selectedCompanyId) {
+        const selectedComp = companies.find(c => c._id === selectedCompanyId);
+        if (selectedComp) {
+          actualCompanyName = selectedComp.name;
+        }
+      }
+
+      const fullAddress = data.businessAddress
+        ? `${data.businessAddress}${data.city ? `, ${data.city}` : ''}${data.state ? `, ${data.state}` : ''}`
+        : (actualCompanyName || 'Joining Existing Company');
+
+      if (registrationMode === 'existing' && selectedCompanyId) {
+        formData.append('companyId', selectedCompanyId);
+      }
+
+      formData.append('companyName', actualCompanyName || '');
+      formData.append('authorizedPerson', data.authorizedPerson);
+      formData.append('businessAddress', fullAddress);
+      if (showGstCertificate && data.gstNumber) formData.append('gstNumber', data.gstNumber);
+      formData.append('mobileNumber', data.mobileNumber);
+      formData.append('emailId', data.emailId);
+      formData.append('password', data.password);
+
+      // Add files if they exist (Spring Boot requires them for new registration approval)
+      if (gstCertFile) formData.append('gstCertificate', gstCertFile);
+      if (companyDocFile) formData.append('companyRegistrationDoc', companyDocFile);
+      if (idProofFile) formData.append('idProof', idProofFile);
+
+      console.log('--- DUAL REGISTRATION START ---');
+      console.log('1. Sending to Ad Mobile (EC2):', jsonPayload);
+      console.log('2. Sending to Spring Boot (Local):', Object.fromEntries(formData.entries()));
+
+      // Step A: Register with Ad Mobile (EC2)
+      const adMobileRes = await adminApi.registerCompany(jsonPayload);
+      console.log('Ad Mobile Response:', adMobileRes);
+
+      if (!adMobileRes || (typeof adMobileRes === 'object' && !adMobileRes.success)) {
+        toast.error(adMobileRes?.message || 'Ad Mobile registration failed');
         setIsSubmitting(false);
         return;
       }
 
-      const response = await adminApi.register(payload);
+      // Step B: Register with Spring Boot (Local)
+      const springBootRes = await adminApi.registerAdmin(formData);
+      console.log('Spring Boot Response:', springBootRes);
 
-      if (response.success) {
-        toast.success(response.message || 'Registration successful');
-        localStorage.setItem('registrationEmail', data.emailId);
-        setTimeout(() => {
-          navigate('/admin/status');
-        }, 1500);
-      } else {
-        toast.error(response.message || 'Registration failed');
+      if (!springBootRes || (typeof springBootRes === 'object' && !springBootRes.success)) {
+        toast.error(springBootRes?.message || 'Spring Boot registration failed');
+        setIsSubmitting(false);
+        return;
       }
+
+      // Success
+      toast.success('Registration synchronized successfully');
+      localStorage.setItem('registrationEmail', data.emailId);
+      setTimeout(() => {
+        navigate('/admin/status');
+      }, 1500);
     } catch (error: any) {
-      console.error('Registration error:', error);
-      toast.error(error.message || 'An unexpected error occurred');
+      console.error('Dual Registration Error:', error);
+      toast.error(error.message || 'An unexpected error occurred during synchronization');
     } finally {
       setIsSubmitting(false);
     }
@@ -268,8 +359,8 @@ export default function AdminRegister() {
                 type="button"
                 onClick={() => setRegistrationMode('new')}
                 className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${registrationMode === 'new'
-                    ? 'bg-white dark:bg-[#2C313C] text-brand-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  ? 'bg-white dark:bg-[#2C313C] text-brand-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                   }`}
               >
                 Register New Company
@@ -278,8 +369,8 @@ export default function AdminRegister() {
                 type="button"
                 onClick={() => setRegistrationMode('existing')}
                 className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all ${registrationMode === 'existing'
-                    ? 'bg-white dark:bg-[#2C313C] text-brand-600 shadow-sm'
-                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                  ? 'bg-white dark:bg-[#2C313C] text-brand-600 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                   }`}
               >
                 Join Existing Company
@@ -306,12 +397,12 @@ export default function AdminRegister() {
                           key={company._id}
                           onClick={() => setSelectedCompanyId(company._id)}
                           className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${selectedCompanyId === company._id
-                              ? 'bg-brand-50 border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 border'
-                              : 'hover:bg-gray-100 dark:hover:bg-[#2C313C] border border-transparent'
+                            ? 'bg-brand-50 border-brand-200 dark:bg-brand-900/20 dark:border-brand-500/30 border'
+                            : 'hover:bg-gray-100 dark:hover:bg-[#2C313C] border border-transparent'
                             }`}
                         >
                           {company.companyLogo ? (
-                            <img src={company.companyLogo} alt={company.name} className="w-10 h-10 rounded-lg object-cover bg-white" />
+                            <img src={typeof company.companyLogo === 'string' ? company.companyLogo : company.companyLogo.url} alt={company.name} className="w-10 h-10 rounded-lg object-cover bg-white" />
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-brand-100 dark:bg-brand-900 flex items-center justify-center text-brand-600 font-bold text-lg">
                               {company.name.charAt(0)}
@@ -375,23 +466,6 @@ export default function AdminRegister() {
                       </select>
                     </div>
                     {errors.companyType && <p className={errorClass}>{errors.companyType.message as string}</p>}
-                  </div>
-
-                  {/* Authorized Person */}
-                  <div>
-                    <label className={labelClass}>Authorized Person Name <span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <User className="w-[18px] h-[18px]" />
-                      </div>
-                      <input
-                        {...register('authorizedPerson', { required: 'Authorized person name is required' })}
-                        type="text"
-                        placeholder="Full name"
-                        className={inputClass}
-                      />
-                    </div>
-                    {errors.authorizedPerson && <p className={errorClass}>{errors.authorizedPerson.message as string}</p>}
                   </div>
 
                   {/* Business Address - full width */}
@@ -507,6 +581,23 @@ export default function AdminRegister() {
                 Contact Information
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                {/* Authorized Person */}
+                <div className="md:col-span-2">
+                  <label className={labelClass}>Authorized Person Name <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <User className="w-[18px] h-[18px]" />
+                    </div>
+                    <input
+                      {...register('authorizedPerson', { required: 'Authorized person name is required' })}
+                      type="text"
+                      placeholder="Enter your full name"
+                      className={inputClass}
+                    />
+                  </div>
+                  {errors.authorizedPerson && <p className={errorClass}>{errors.authorizedPerson.message as string}</p>}
+                </div>
 
                 {/* Mobile Number */}
                 <div>
