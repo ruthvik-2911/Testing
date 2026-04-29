@@ -11,6 +11,7 @@ import {
   fetchAds, publishAd, duplicateAd, archiveAd,
   type Advertisement 
 } from "../../services/ads"
+import { ThemeToggle } from "../../components/layout/ThemeToggle"
 
 export default function AdsList() {
   const navigate = useNavigate()
@@ -65,12 +66,21 @@ export default function AdsList() {
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
+      // Get company UID from session
+      let companyUID = undefined;
+      const userStr = localStorage.getItem('admin_user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        companyUID = user.companyUID || user.companyId || user.uid;
+      }
+
       const response = await fetchAds({ 
         page, 
         limit, 
         search: searchTerm, 
         status: statusFilter,
         publisher: publisherFilter,
+        companyUID,
         dateRange: getDateRangeParams()
       })
       setData(response.data)
@@ -152,6 +162,7 @@ export default function AdsList() {
             </div>
             
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               <button className="p-2 text-gray-400 hover:text-gray-500 dark:hover:text-gray-300 relative transition-colors">
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-[#1C1F26]"></span>

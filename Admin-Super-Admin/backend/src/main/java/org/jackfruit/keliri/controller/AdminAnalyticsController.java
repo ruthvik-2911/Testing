@@ -31,7 +31,8 @@ public class AdminAnalyticsController {
             @RequestParam(defaultValue = "All") String adId,
             @RequestParam(defaultValue = "All") String publisherId,
             @RequestParam(defaultValue = "All") String adType,
-            @RequestParam(defaultValue = "All") String status) {
+            @RequestParam(defaultValue = "All") String status,
+            @RequestParam(required = false) String companyUID) {
 
         try {
             if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -53,7 +54,7 @@ public class AdminAnalyticsController {
             if (startDate == null) startDate = endDate.minusDays(30);
 
             AdminAnalyticsResponse analytics = analyticsService.getAnalytics(
-                    adminId, startDate, endDate, adId, publisherId, adType, status);
+                    adminId, startDate, endDate, adId, publisherId, adType, status, companyUID);
 
             return ResponseEntity.ok(analytics);
 

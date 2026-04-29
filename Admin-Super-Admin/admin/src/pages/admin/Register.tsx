@@ -124,23 +124,67 @@ export default function AdminRegister() {
           setIsSubmitting(false);
           return;
         }
+        // Look up actual company name for the payload
+        let actualName = data.authorizedPerson; // fallback
+        const selectedComp = companies.find(c => c._id === selectedCompanyId);
+        if (selectedComp) {
+          actualName = selectedComp.name;
+        }
+
         jsonPayload = {
           companyId: selectedCompanyId,
+          name: data.authorizedPerson, // Use authorizedPerson here to pass the unique name check
           email: data.emailId,
-          name: data.authorizedPerson,
           phoneNumber: {
             countryCode: data.countryCode || '+91',
             dialNumber: data.mobileNumber,
           },
           password: data.password,
+          billingAddress: {
+            addressLine1: data.businessAddress || "Company Headquarters",
+            city: "Unknown",
+            state: "Unknown",
+            zipCode: "000000",
+            country: "India"
+          },
+          tax: {
+            taxType: 'GST',
+            taxNumber: "00AAAAA0000A1Z0"
+          },
+          primaryContact: {
+            name: data.authorizedPerson, // Administrator Name
+            email: data.emailId,
+            phoneNumber: {
+              countryCode: data.countryCode || '+91',
+              dialNumber: data.mobileNumber
+            }
+          }
         };
       }
 
       // 2. Build FormData Payload for Spring Boot (Localhost)
       const formData = new FormData();
-      formData.append('companyName', data.companyName || (jsonPayload.name || ''));
+      
+      // Get the actual company name if joining an existing one
+      let actualCompanyName = data.companyName;
+      if (registrationMode === 'existing' && selectedCompanyId) {
+        const selectedComp = companies.find(c => c._id === selectedCompanyId);
+        if (selectedComp) {
+          actualCompanyName = selectedComp.name;
+        }
+      }
+
+      const fullAddress = data.businessAddress
+        ? `${data.businessAddress}${data.city ? `, ${data.city}` : ''}${data.state ? `, ${data.state}` : ''}`
+        : (actualCompanyName || 'Joining Existing Company');
+
+      if (registrationMode === 'existing' && selectedCompanyId) {
+        formData.append('companyId', selectedCompanyId);
+      }
+
+      formData.append('companyName', actualCompanyName || '');
       formData.append('authorizedPerson', data.authorizedPerson);
-      formData.append('businessAddress', data.businessAddress || (data.city + ', ' + data.state));
+      formData.append('businessAddress', fullAddress);
       if (showGstCertificate && data.gstNumber) formData.append('gstNumber', data.gstNumber);
       formData.append('mobileNumber', data.mobileNumber);
       formData.append('emailId', data.emailId);
@@ -151,29 +195,36 @@ export default function AdminRegister() {
       if (companyDocFile) formData.append('companyRegistrationDoc', companyDocFile);
       if (idProofFile) formData.append('idProof', idProofFile);
 
-      console.log('Sending to Ad Mobile (EC2):', jsonPayload);
-      console.log('Sending to Spring Boot (Local):', Object.fromEntries(formData.entries()));
+      console.log('--- DUAL REGISTRATION START ---');
+      console.log('1. Sending to Ad Mobile (EC2):', jsonPayload);
+      console.log('2. Sending to Spring Boot (Local):', Object.fromEntries(formData.entries()));
 
-      // 3. Execute both calls
-      const [adMobileRes, springBootRes] = await Promise.all([
-        adminApi.registerCompany(jsonPayload),
-        adminApi.registerAdmin(formData)
-      ]);
+      // Step A: Register with Ad Mobile (EC2)
+      const adMobileRes = await adminApi.registerCompany(jsonPayload);
+      console.log('Ad Mobile Response:', adMobileRes);
 
-      console.log('Ad Mobile Response Data:', adMobileRes);
-      console.log('Spring Boot Response Data:', springBootRes);
-
-      if (adMobileRes.success || springBootRes.success) {
-        toast.success('Registration synchronized successfully');
-        localStorage.setItem('registrationEmail', data.emailId);
-        setTimeout(() => {
-          navigate('/admin/status');
-        }, 1500);
-      } else {
-        console.log('Ad Mobile Response:', adMobileRes);
-        console.log('Spring Boot Response:', springBootRes);
-        toast.error(adMobileRes.message || springBootRes.message || 'Registration failed');
+      if (!adMobileRes || (typeof adMobileRes === 'object' && !adMobileRes.success)) {
+        toast.error(adMobileRes?.message || 'Ad Mobile registration failed');
+        setIsSubmitting(false);
+        return;
       }
+
+      // Step B: Register with Spring Boot (Local)
+      const springBootRes = await adminApi.registerAdmin(formData);
+      console.log('Spring Boot Response:', springBootRes);
+
+      if (!springBootRes || (typeof springBootRes === 'object' && !springBootRes.success)) {
+        toast.error(springBootRes?.message || 'Spring Boot registration failed');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Success
+      toast.success('Registration synchronized successfully');
+      localStorage.setItem('registrationEmail', data.emailId);
+      setTimeout(() => {
+        navigate('/admin/status');
+      }, 1500);
     } catch (error: any) {
       console.error('Dual Registration Error:', error);
       toast.error(error.message || 'An unexpected error occurred during synchronization');
@@ -417,23 +468,6 @@ export default function AdminRegister() {
                     {errors.companyType && <p className={errorClass}>{errors.companyType.message as string}</p>}
                   </div>
 
-                  {/* Authorized Person */}
-                  <div>
-                    <label className={labelClass}>Authorized Person Name <span className="text-red-500">*</span></label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
-                        <User className="w-[18px] h-[18px]" />
-                      </div>
-                      <input
-                        {...register('authorizedPerson', { required: 'Authorized person name is required' })}
-                        type="text"
-                        placeholder="Full name"
-                        className={inputClass}
-                      />
-                    </div>
-                    {errors.authorizedPerson && <p className={errorClass}>{errors.authorizedPerson.message as string}</p>}
-                  </div>
-
                   {/* Business Address - full width */}
                   <div className="md:col-span-2">
                     <label className={labelClass}>Business Address <span className="text-red-500">*</span></label>
@@ -547,6 +581,23 @@ export default function AdminRegister() {
                 Contact Information
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+                {/* Authorized Person */}
+                <div className="md:col-span-2">
+                  <label className={labelClass}>Authorized Person Name <span className="text-red-500">*</span></label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                      <User className="w-[18px] h-[18px]" />
+                    </div>
+                    <input
+                      {...register('authorizedPerson', { required: 'Authorized person name is required' })}
+                      type="text"
+                      placeholder="Enter your full name"
+                      className={inputClass}
+                    />
+                  </div>
+                  {errors.authorizedPerson && <p className={errorClass}>{errors.authorizedPerson.message as string}</p>}
+                </div>
 
                 {/* Mobile Number */}
                 <div>

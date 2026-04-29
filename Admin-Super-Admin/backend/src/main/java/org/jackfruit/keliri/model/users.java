@@ -29,6 +29,7 @@ public class users {
     
     private String password;
     private String companyName;
+    private String companyUID; // Mobilize company UUID — used for data isolation
     private String accountStatus; // ACTIVE, SUSPENDED, PENDING
     
     
@@ -94,6 +95,14 @@ public class users {
 
 	public void setCompanyName(String companyName) {
 		this.companyName = companyName;
+	}
+
+	public String getCompanyUID() {
+		return companyUID;
+	}
+
+	public void setCompanyUID(String companyUID) {
+		this.companyUID = companyUID;
 	}
 
 	public String getAccountStatus() {

@@ -16,9 +16,11 @@ public class KeliriApplication extends SpringBootServletInitializer {//to suppor
 	    }
 	
 	public static void main(String[] args) {
+		// Force disable AWS EC2 Metadata lookup to prevent crash when running locally
+		System.setProperty("aws.disableEc2Metadata", "true");
+		
 		SpringApplication.run(KeliriApplication.class, args);
 		System.out.println("Here we go");
-		//extends SpringBootServletInitializer
 	}
 
 }

@@ -50,6 +50,9 @@ public class AdminPaymentController {
     @Autowired
     private SuperAdminRepository superAdminRepo;
 
+    @Autowired
+    private org.jackfruit.keliri.repository.advertisementsRepository adsRepo;
+
     @Value("${razorpay.key.id}")
     private String keyId;
 
@@ -152,6 +155,7 @@ public class AdminPaymentController {
                     // Let's at least mark campaigns as ACTIVE if they belong to this ad and were
                     // PENDING.
                     updateCampaignStatus(txn.getAdId());
+                    updateAdPaymentStatus(txn.getAdId());
 
                     // Generate and Send Invoice
                     try {
@@ -211,13 +215,50 @@ public class AdminPaymentController {
         }
     }
 
+    @GetMapping("/paid-ads")
+    public ResponseEntity<?> getPaidAdIds(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        try {
+            String adminId = extractAdminId(authHeader);
+            if (adminId == null)
+                return unauthorized();
+
+            java.util.List<PaymentTransaction> successTxns = paymentRepo.findByAdminIdAndStatus(adminId, "SUCCESS");
+            java.util.List<String> paidAdIds = successTxns.stream()
+                    .map(PaymentTransaction::getAdId)
+                    .filter(id -> id != null)
+                    .distinct()
+                    .collect(java.util.stream.Collectors.toList());
+
+            return ResponseEntity.ok(Map.of("success", true, "paidAdIds", paidAdIds));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("success", false, "message", "Internal server error"));
+        }
+    }
+
+    private void updateAdPaymentStatus(String adId) {
+        if (adId == null) return;
+        try {
+            Optional<org.jackfruit.keliri.model.advertisements> adOpt = adsRepo.findByUid(adId);
+            if (adOpt.isPresent()) {
+                org.jackfruit.keliri.model.advertisements ad = adOpt.get();
+                ad.setPaymentStatus("Paid");
+                adsRepo.save(ad);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
     private void updateCampaignStatus(String adId) {
         if (adId == null)
             return;
         try {
             java.util.List<ad_campaigns> campaigns = campaignRepo.findByAdvertisementId(adId);
             for (ad_campaigns campaign : campaigns) {
-                if ("PENDING".equalsIgnoreCase(campaign.getCompaignsStatus())) {
+                if ("PENDING".equalsIgnoreCase(campaign.getCompaignsStatus()) || "INACTIVE".equalsIgnoreCase(campaign.getCompaignsStatus())) {
                     campaign.setCompaignsStatus("ACTIVE");
                     campaignRepo.save(campaign);
                 }
