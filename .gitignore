@@ -1,6 +1,39 @@
+# Root gitignore - Only allow Admin-Super-Admin folder
+*
+!Admin-Super-Admin/
+!Admin-Super-Admin/**
+!.gitignore
+
+# Standard Ignores
 node_modules/
-.idea/
-.DS_Store
 dist/
 build/
 *.log
+.idea/
+.vscode/
+.DS_Store
+*.js
+*.json
+!Admin-Super-Admin/**/*.js
+!Admin-Super-Admin/**/*.json
+!Admin-Super-Admin/**/*.ts
+!Admin-Super-Admin/**/*.tsx
+
+# Specific Exclusions requested by user
+mobilize_api/
+Testing/
+check_attachments.js
+check_testing_publishers.js
+check_user.js
+fix_user.js
+link_unlinked_publishers.js
+mask_secrets.js
+revert_to_admin.js
+test_admin_login.js
+test_api.py
+test_campaigns.json
+update_superadmin_phone.js
+update_superadmin_phone_correct.js
+package.json
+package-lock.json
+phone_otp_demo.html
