@@ -122,6 +122,7 @@ public interface ad_campaignsRepository extends MongoRepository<ad_campaigns, St
 	@Query(value = "{compaignsStatus:'ACTIVE','news':1}", fields = "{'location.lat':1,'location.lng':1,'compaignsStatus':1,'createdBy':1,'location.range':1,'dateRange':1,'campaignCategories':1,'advertisementId':1,'news':1}")
 	List<ad_campaigns> findByNews();
 
+	@Query(value = "{'advertisementId.uid': ?0}")
 	List<ad_campaigns> findByAdvertisementId(String advertisementId);
 
 }

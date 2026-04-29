@@ -41,19 +41,43 @@ public class AdminAuthService {
         }
 
         if (passwordEncoder.matches(password, user.getPassword())) {
+            // If companyUID is missing (old record), look it up from Mobilize and save it now
+            if (user.getCompanyUID() == null || user.getCompanyUID().isBlank()) {
+                try {
+                    List<Map> companies = mobilizeApiService.fetchAllCompaniesDirectly();
+                    Map<String, Object> matched = (Map<String, Object>) companies.stream()
+                            .filter(c -> {
+                                if (c == null) return false;
+                                String cEmail = String.valueOf(c.get("email"));
+                                String cName = String.valueOf(c.get("name"));
+                                return identifier.equalsIgnoreCase(cEmail) || 
+                                       (user.getCompanyName() != null && user.getCompanyName().equalsIgnoreCase(cName));
+                            })
+                            .findFirst().orElse(null);
+                    if (matched != null && matched.get("uid") != null) {
+                        user.setCompanyUID(String.valueOf(matched.get("uid")));
+                        usersRepo.save(user);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Could not look up companyUID from Mobilize for: " + identifier);
+                }
+            }
+
             String token = jwtService.generateToken(user);
             
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("success", true);
             payload.put("token", token);
             payload.put("message", "Login Successful");
-            payload.put("user", Map.of(
-                "id", user.getId(),
-                "name", user.getFullName(),
-                "email", user.getEmailAddress(),
-                "company", user.getCompanyName() != null ? user.getCompanyName() : "",
-                "role", user.getUserType()
-            ));
+            Map<String, Object> userMap = new LinkedHashMap<>();
+            userMap.put("id", user.getId());
+            userMap.put("name", user.getFullName());
+            userMap.put("email", user.getEmailAddress());
+            userMap.put("company", user.getCompanyName() != null ? user.getCompanyName() : "");
+            userMap.put("role", user.getUserType());
+            // Include companyUID so the frontend can correctly scope all API calls
+            userMap.put("companyUID", user.getCompanyUID() != null ? user.getCompanyUID() : "");
+            payload.put("user", userMap);
             return payload;
         }
 
@@ -92,6 +116,11 @@ public class AdminAuthService {
         Object companyId = company.get("_id");
         if (companyId != null) {
             user.setId(String.valueOf(companyId));
+        }
+        // Store the Mobilize UUID (uid field) — this is the companyUID for data isolation
+        Object companyUid = company.get("uid");
+        if (companyUid != null) {
+            user.setCompanyUID(String.valueOf(companyUid));
         }
         user.setFullName(firstNonBlank(
                 asString(reg.get("authorizedPerson")),

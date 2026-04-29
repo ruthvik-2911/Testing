@@ -49,6 +49,7 @@ export interface FetchPublishersArgs {
   limit: number
   search?: string
   status?: string
+  companyUID?: string
 }
 
 export interface FetchPublishersResult {
@@ -82,9 +83,12 @@ export const fetchPublishers = async ({
   limit,
   search,
   status,
+  companyUID,
 }: FetchPublishersArgs): Promise<FetchPublishersResult> => {
   try {
-    const response = await adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { params: { all: 'yes' } })
+    const response = await adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { 
+      params: { all: 'yes', companyUID } 
+    })
     const rawData = response.data?.data || []
 
     // Map the payload matching the Mobile Backend's signature
@@ -101,6 +105,11 @@ export const fetchPublishers = async ({
       email: p.email || '',
       address: p.address || p.bio || '',
     }))
+
+    // Frontend Fallback Filter: ensure an admin only sees their company in the list
+    if (companyUID) {
+      publishers = publishers.filter((p) => p.id === companyUID)
+    }
 
     if (search) {
       const s = search.toLowerCase()

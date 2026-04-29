@@ -67,6 +67,8 @@ api.interceptors.response.use(
 );
 
 export interface ApiResponse<T = any> {
+  user?: Record<string, any>;  // returned by Spring Boot login
+  token?: string;               // returned by Spring Boot login
   success: boolean;
   message: string;
   data?: T;

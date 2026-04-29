@@ -42,7 +42,8 @@ public class AdminAnalyticsService {
             String adId,
             String publisherId,
             String adType,
-            String status) {
+            String status,
+            String companyUID) {
 
         // 1. Fetch campaigns for this admin with basic filters
         List<ad_campaigns> campaigns = campaignsRepository.findByCreatedBy(adminId);

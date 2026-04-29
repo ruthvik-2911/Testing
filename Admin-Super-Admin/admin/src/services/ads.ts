@@ -1,4 +1,4 @@
-import { adMobileApi } from './api';
+import { adMobileApi, api } from './api';
 import {
   AD_TYPE_UIDS,
   CTA_UIDS,
@@ -111,6 +111,7 @@ export interface FetchAdsArgs {
   search?: string;
   status?: string;
   publisher?: string;
+  companyUID?: string;
   dateRange?: { start?: string; end?: string };
 }
 
@@ -121,58 +122,137 @@ export interface FetchAdsResult {
   uniquePublishers: string[];
 }
 
+// Fetch the set of ad IDs that have been paid for, from the Spring Boot backend.
+// This is the permanent, isolated source of truth for payment status.
+async function fetchPaidAdIds(): Promise<Set<string>> {
+  try {
+    const token = localStorage.getItem('admin_token');
+    const res = await api.get('/api/admin/payments/paid-ads', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    });
+    const ids: string[] = res.data?.paidAdIds ?? [];
+    return new Set(ids);
+  } catch {
+    return new Set();
+  }
+}
+
 export const fetchAds = async ({
   page,
   limit,
   search,
   status,
+  companyUID,
 }: FetchAdsArgs): Promise<FetchAdsResult> => {
-  const params: Record<string, any> = { page, limit };
-  if (search) params.search = search;
-  if (status && status !== 'All') params.status = status;
+  // Fetch a large batch of campaigns AND advertisements
+  const params: Record<string, any> = { page: 1, limit: 1000 };
+  if (companyUID) params.companyUID = companyUID;
 
-  // We fetch from /v1/ad-campaigns to get monitoring data (impressions, clicks, status)
-  // as per the mobile app's PublishedAdsDashboard logic.
-  const response = await adMobileApi.get(ENDPOINTS.campaignsList, { params });
-  const result = response.data;
+  // Fetch campaigns, advertisements, and paid ad IDs in parallel
+  const [campaignsRes, adsRes, paidAdIds] = await Promise.all([
+    adMobileApi.get(ENDPOINTS.campaignsList, { params }).catch(() => ({ data: { data: [] } })),
+    adMobileApi.get(ENDPOINTS.adsList, { params }).catch(() => ({ data: { data: [] } })),
+    fetchPaidAdIds()
+  ]);
 
-  const rawData = result.data ?? [];
+  const rawCampaigns = campaignsRes.data?.data ?? [];
+  let rawAds = adsRes.data?.data ?? [];
 
-  const ads: Advertisement[] = rawData.map((camp: any) => {
-    const ad = camp.advertisementId || {};
+  // Frontend Fallback Filter: ensure an admin only sees their company's ads
+  if (companyUID) {
+    rawAds = rawAds.filter((ad: any) => {
+      const adCompanyId = ad.company?.uid;
+      return adCompanyId === companyUID;
+    });
+  }
 
-    // Normalize status: backends uses "ACTIVE", "PENDING", "INACTIVE", "EXPIRED", "COMPLETED"
-    // Frontend AdStatus expects: 'Draft' | 'Pending' | 'Active' | 'Expired' | 'Suspended'
-    let normalizedStatus: AdStatus = 'Pending';
-    const backendStatus = (camp.compaignsStatus || '').toUpperCase();
+  // Deduplicate campaigns by advertisementId (to get the most relevant metrics/status)
+  const campaignMap = new Map<string, any>();
+  for (const camp of rawCampaigns) {
+    const adUid = camp.advertisementId?.uid || camp.uid;
+    if (!adUid) continue;
+    
+    const existing = campaignMap.get(adUid);
+    if (!existing) {
+      campaignMap.set(adUid, camp);
+    } else {
+      const currentStatus = (camp.compaignsStatus || '').toUpperCase();
+      const existingStatus = (existing.compaignsStatus || '').toUpperCase();
+      
+      const priority: Record<string, number> = { 'ACTIVE': 3, 'PENDING': 2, 'INACTIVE': 1 };
+      const currentPrio = priority[currentStatus] || 0;
+      const existingPrio = priority[existingStatus] || 0;
+      
+      // Prefer Active/Pending over Inactive. If same, prefer newer.
+      if (currentPrio > existingPrio || (currentPrio === existingPrio && new Date(camp.createdAt).getTime() > new Date(existing.createdAt).getTime())) {
+        campaignMap.set(adUid, camp);
+      }
+    }
+  }
 
-    if (backendStatus === 'ACTIVE') normalizedStatus = 'Active';
-    else if (backendStatus === 'PENDING') normalizedStatus = 'Pending';
-    else if (backendStatus === 'EXPIRED' || backendStatus === 'COMPLETED') normalizedStatus = 'Expired';
-    else if (backendStatus === 'INACTIVE') normalizedStatus = 'Draft';
+  // Merge advertisements with their corresponding campaign (if one exists)
+  // We use rawAds as the base so that "Draft" ads without a campaign still appear.
+  let mergedAds: Advertisement[] = rawAds.map((ad: any) => {
+    const adUid = ad.uid;
+    const camp = campaignMap.get(adUid);
+
+    let normalizedStatus: AdStatus = 'Draft';
+    let backendStatus = '';
+    
+    if (camp) {
+       backendStatus = (camp.compaignsStatus || '').toUpperCase();
+       if (backendStatus === 'ACTIVE') normalizedStatus = 'Active';
+       else if (backendStatus === 'PENDING') normalizedStatus = 'Pending';
+       else if (backendStatus === 'EXPIRED' || backendStatus === 'COMPLETED') normalizedStatus = 'Expired';
+       else if (backendStatus === 'INACTIVE') normalizedStatus = 'Draft';
+    }
 
     return {
-      id: ad.uid || camp.uid,
+      id: adUid,
       title: ad.title || 'Untitled Campaign',
       publishers: ad.company?.name ? [ad.company.name] : [],
       status: normalizedStatus,
-      startDate: camp.dateRange?.fromDate || ad.startDate,
-      endDate: camp.dateRange?.toDate || ad.endDate,
-      impressions: camp.reachedPublishingCount ?? 0, // using reachedPublishingCount as a proxy for impressions if not available
-      clicks: camp.clicks ?? 0,
-      ctr: camp.ctr ?? 0,
-      paymentStatus: (normalizedStatus === 'Draft' || normalizedStatus === 'Pending') ? 'Pending' : 'Paid',
+      startDate: camp?.dateRange?.fromDate || ad.startDate,
+      endDate: camp?.dateRange?.toDate || ad.endDate,
+      impressions: camp?.reachedPublishingCount ?? 0,
+      clicks: camp?.clicks ?? 0,
+      ctr: camp?.ctr ?? 0,
+      // Payment status: check against the authoritative list from Spring Boot.
+      paymentStatus: paidAdIds.has(adUid) ? 'Paid' : 'Pending',
     };
   });
 
-  const uniquePublishers = Array.from(
-    new Set(rawData.map((c: any) => c.advertisementId?.company?.name).filter(Boolean))
-  ) as string[];
+  // Sort by date DESC (newest first)
+  mergedAds.sort((a, b) => {
+    // We don't have createdAt in the mapped object directly, 
+    // but the raw objects have it. Let's find the original object for sorting.
+    const getCreatedAt = (id: string) => {
+      const origAd = rawAds.find((r: any) => r.uid === id);
+      return origAd?.createdAt ? new Date(origAd.createdAt).getTime() : 0;
+    };
+    return getCreatedAt(b.id) - getCreatedAt(a.id);
+  });
+
+  // Apply Search/Status filters locally since we have the full list
+  if (search) {
+    const s = search.toLowerCase();
+    mergedAds = mergedAds.filter(a => a.title.toLowerCase().includes(s));
+  }
+  if (status && status !== 'All') {
+    mergedAds = mergedAds.filter(a => a.status === status);
+  }
+
+  const uniquePublishers = Array.from(new Set(mergedAds.flatMap(ad => ad.publishers))).filter(Boolean);
+
+  // Pagination logic on the frontend
+  const totalItems = mergedAds.length;
+  const totalPages = Math.ceil(totalItems / limit) || 1;
+  const paginatedAds = mergedAds.slice((page - 1) * limit, page * limit);
 
   return {
-    data: ads,
-    totalItems: result.total ?? ads.length,
-    totalPages: result.totalPages ?? 1,
+    data: paginatedAds,
+    totalItems,
+    totalPages,
     uniquePublishers,
   };
 };
@@ -207,20 +287,29 @@ export const getAdById = async (id: string): Promise<Advertisement> => {
 // Payload built using buildCreateAdPayload() from constants.ts
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Sanitize helper to prevent regex-based backend crashes on special characters
+const sanitize = (str: string) => {
+  if (!str) return str;
+  return str.replace(/[()]/g, (match) => `\\${match}`);
+};
+
 export const createAd = async (data: any): Promise<Advertisement> => {
   // Resolve frontend CTA label → backend CTA code
   const ctaCode = CTA_LABEL_TO_CODE[data.ctaType] ?? 'REDIRECT';
 
   const payload = buildCreateAdPayload({
-    title: data.title,
-    description: data.description,
+    title: sanitize(data.title),
+    description: sanitize(data.description),
     adType: data.type,
     imageAdUID: data.imageAdUID,     // uploaded thumbnail/Image Ad UID
     companyUID: data.companyUID,
     ctaLabel: data.ctaLabel,
     ctaCode,
     ctaActionValue: data.ctaActionValue,
-    customSections: data.customSections ?? [],
+    customSections: (data.customSections ?? []).map((s: any) => ({
+      title: sanitize(s.title),
+      description: sanitize(s.description)
+    })),
     bannerUIDs: data.bannerUIDs,
     videoUID: data.videoUID,
     videoUrl: data.videoUrl,
@@ -231,10 +320,15 @@ export const createAd = async (data: any): Promise<Advertisement> => {
 
   const response = await adMobileApi.post(ENDPOINTS.adsCreate, payload);
   console.log('📦 Create Ad Response:', response.data);
+  
+  if (!response.data.success) {
+    throw new Error(response.data.message || response.data.data || "Failed to create advertisement");
+  }
+
   const result = response.data.data;
 
   return {
-    id: result.uid,
+    id: result.uid || result._id,
     title: result.title,
     publishers: [],
     status: 'Draft',
@@ -256,15 +350,18 @@ export const updateAd = async (id: string, data: any): Promise<Advertisement> =>
   const ctaCode = CTA_LABEL_TO_CODE[data.ctaType] ?? 'REDIRECT';
 
   const payload = buildCreateAdPayload({
-    title: data.title,
-    description: data.description,
+    title: sanitize(data.title),
+    description: sanitize(data.description),
     adType: data.type,
     imageAdUID: data.imageAdUID,
     companyUID: data.companyUID,
     ctaLabel: data.ctaLabel,
     ctaCode,
     ctaActionValue: data.ctaActionValue,
-    customSections: data.customSections ?? [],
+    customSections: (data.customSections ?? []).map((s: any) => ({
+      title: sanitize(s.title),
+      description: sanitize(s.description)
+    })),
     bannerUIDs: data.bannerUIDs,
     videoUID: data.videoUID,
     videoUrl: data.videoUrl,
@@ -275,10 +372,15 @@ export const updateAd = async (id: string, data: any): Promise<Advertisement> =>
 
   const response = await adMobileApi.put(ENDPOINTS.adsUpdate(id), payload);
   console.log(`📦 Update Ad ${id} Response:`, response.data);
+  
+  if (!response.data.success) {
+    throw new Error(response.data.message || response.data.data || "Failed to update advertisement");
+  }
+
   const result = response.data.data;
 
   return {
-    id: result.uid,
+    id: result.uid || result._id,
     title: result.title,
     publishers: [],
     status: 'Draft',
@@ -333,6 +435,10 @@ export const finalizeAdPublication = async (
 
   const response = await adMobileApi.post(ENDPOINTS.campaignCreate, payload);
   console.log('📦 Create Campaign Response:', response.data);
+
+  if (!response.data.success) {
+    throw new Error(response.data.message || response.data.data || "Failed to publish advertisement");
+  }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -27,7 +27,15 @@ export default function Dashboard() {
     const loadData = async () => {
       setLoading(true)
       try {
-        const result = await fetchDashboardData(filter)
+        // Get company UID from session
+        let companyUID = undefined;
+        const userStr = localStorage.getItem('admin_user');
+        if (userStr) {
+          const user = JSON.parse(userStr);
+          companyUID = user.companyUID || user.companyId || user.uid;
+        }
+
+        const result = await fetchDashboardData(filter, companyUID)
         setData(result)
       } catch (error) {
         console.error("Failed to load dashboard data", error)

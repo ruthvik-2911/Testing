@@ -27,8 +27,16 @@ public class advertisements {
 	private String adType;
 	private ArrayList<customTextSectionArrayObject> customTextSection;
 	private int gitagnumber;
+	private String paymentStatus = "pending";
 
 	private cta cta;
+	
+	public String getPaymentStatus() {
+		return paymentStatus;
+	}
+	public void setPaymentStatus(String paymentStatus) {
+		this.paymentStatus = paymentStatus;
+	}
 	public int getGitagnumber() {
 		return gitagnumber;
 	}

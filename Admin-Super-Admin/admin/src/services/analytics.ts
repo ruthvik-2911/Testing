@@ -6,6 +6,7 @@ export interface AnalyticsFilters {
   publisherId: string
   adType: string
   status: string
+  companyUID?: string
 }
 
 export interface KpiData {
@@ -79,7 +80,8 @@ export const fetchAnalytics = async (filters: AnalyticsFilters): Promise<Analyti
       adId: filters.adId,
       publisherId: filters.publisherId,
       adType: filters.adType,
-      status: filters.status
+      status: filters.status,
+      companyUID: filters.companyUID
     }
   })
   

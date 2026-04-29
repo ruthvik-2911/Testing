@@ -109,9 +109,11 @@ public class MobilizeApiService {
     }
 
     /**
-     * Creates/updates a Mobilize "companies" record with Keliri admin registration details.
+     * Creates/updates a Mobilize "companies" record with Keliri admin registration
+     * details.
      *
-     * We store the full form payload under `keliriRegistration` to avoid guessing / breaking
+     * We store the full form payload under `keliriRegistration` to avoid guessing /
+     * breaking
      * Mobilize's native schema.
      *
      * @return the company document id/uid (best-effort)
@@ -119,12 +121,28 @@ public class MobilizeApiService {
     public String upsertKeliriAdminRegistrationCompany(Map<String, Object> payload) {
         try {
             String email = payload.get("email") != null ? String.valueOf(payload.get("email")) : null;
+            String companyId = payload.get("companyId") != null ? String.valueOf(payload.get("companyId")) : null;
+            
             if (email == null || email.isBlank()) {
                 throw new IllegalArgumentException("email is required");
             }
 
-            Query q = new Query(Criteria.where("email").is(email));
-            Map existing = mongoTemplate.findOne(q, Map.class, "companies");
+            Map existing = null;
+            if (companyId != null && !companyId.isBlank()) {
+                // Priority 1: Look up by Company ID (for Joining Existing Company)
+                try {
+                    Query qId = new Query(Criteria.where("_id").is(new ObjectId(companyId)));
+                    existing = mongoTemplate.findOne(qId, Map.class, "companies");
+                } catch (Exception e) {
+                    System.err.println("Invalid companyId format: " + companyId);
+                }
+            }
+
+            if (existing == null) {
+                // Priority 2: Look up by Email (for New Registrations or fallback)
+                Query qEmail = new Query(Criteria.where("email").is(email));
+                existing = mongoTemplate.findOne(qEmail, Map.class, "companies");
+            }
 
             if (existing == null) {
                 Map<String, Object> doc = new LinkedHashMap<>();
@@ -147,7 +165,8 @@ public class MobilizeApiService {
             // Update
             existing.put("updatedAt", new Date());
             existing.put("name", payload.getOrDefault("companyName", existing.getOrDefault("name", "")));
-            existing.put("companyType", payload.getOrDefault("companyType", existing.getOrDefault("companyType", "PRODUCTS_SERVICES")));
+            existing.put("companyType",
+                    payload.getOrDefault("companyType", existing.getOrDefault("companyType", "PRODUCTS_SERVICES")));
             existing.put("keliriRegistration", payload);
 
             mongoTemplate.save(existing, "companies");

@@ -24,7 +24,15 @@ export default function AnalyticsDashboard() {
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetchAnalytics(filters)
+      // Get company UID from session
+      let companyUID = undefined;
+      const userStr = localStorage.getItem('admin_user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        companyUID = user.companyUID || user.companyId || user.uid;
+      }
+
+      const res = await fetchAnalytics({ ...filters, companyUID })
       setData(res)
     } catch (err) {
       toast.error("Failed to sync analytics engine")

@@ -33,12 +33,15 @@ export interface DashboardData {
   recentActivities: Activity[]
 }
 
-export const fetchDashboardData = async (filter: string = "30"): Promise<DashboardData> => {
+export const fetchDashboardData = async (filter: string = "30", companyUID?: string): Promise<DashboardData> => {
   try {
     // Prepare date ranges
     const today = new Date();
     const pastDate = new Date();
     pastDate.setDate(today.getDate() - parseInt(filter === "Today" ? "1" : filter));
+
+    // Prepare common params
+    const commonParams: any = { companyUID };
 
     // Fire ALL API calls simultaneously to drastically reduce load time!
     const [
@@ -48,14 +51,15 @@ export const fetchDashboardData = async (filter: string = "30"): Promise<Dashboa
       companyRes,
       adsRes
     ] = await Promise.all([
-      adMobileApi.get('/v1/user/count/dashboard').catch(() => ({ data: {} })),
+      adMobileApi.get('/v1/user/count/dashboard', { params: commonParams }).catch(() => ({ data: {} })),
       adMobileApi.post('/v1/ad-campaigns/count/dateRange', {
         fromDate: pastDate.toISOString(),
-        toDate: today.toISOString()
+        toDate: today.toISOString(),
+        companyUID // Include in body for POST
       }).catch(() => ({ data: {} })),
-      adMobileApi.get('/v1/ad-campaigns', { params: { page: 1, limit: 200 } }).catch(() => ({ data: { data: [] } })),
-      adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { params: { all: 'yes' } }).catch(() => ({ data: { data: [] } })),
-      adMobileApi.get('/v1/advertisements', { params: { page: 1, limit: 200 } }).catch(() => ({ data: { data: [] } }))
+      adMobileApi.get('/v1/ad-campaigns', { params: { ...commonParams, page: 1, limit: 200 } }).catch(() => ({ data: { data: [] } })),
+      adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { params: { ...commonParams, all: 'yes' } }).catch(() => ({ data: { data: [] } })),
+      adMobileApi.get('/v1/advertisements', { params: { ...commonParams, page: 1, limit: 200 } }).catch(() => ({ data: { data: [] } }))
     ]);
 
     const counts = countRes.data?.data || countRes.data || {};

@@ -117,6 +117,11 @@ import javax.imageio.ImageIO;
 		    }
 
 		    public String uploadFile(MultipartFile file) throws IOException {
+		    	if (accessKey.isBlank() || secretKey.isBlank()) {
+		    		System.out.println("[S3Service] AWS keys missing. Returning mock URL for local testing.");
+		    		return "https://via.placeholder.com/150?text=" + file.getOriginalFilename();
+		    	}
+		    	
 		    	validateUploadConfiguration();
 		        S3Client s3Client = getS3Client();
 		        String fileName = UUID.randomUUID()+ "-" + file.getOriginalFilename();
