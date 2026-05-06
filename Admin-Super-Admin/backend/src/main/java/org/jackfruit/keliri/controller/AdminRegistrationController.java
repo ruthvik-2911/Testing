@@ -101,6 +101,23 @@ public class AdminRegistrationController {
                         .body(Map.of("success", false, "message", "Failed to save registration in Mobilize database"));
             }
 
+            // Also save locally for Super Admin visibility
+            AdminRegistration localReg = new AdminRegistration();
+            localReg.setId(mobilizeId);
+            localReg.setCompanyName(companyName);
+            localReg.setAuthorizedPerson(authorizedPerson);
+            localReg.setBusinessAddress(businessAddress);
+            localReg.setGstNumber(gstNumber);
+            localReg.setMobileNumber(mobileNumber);
+            localReg.setEmailId(emailId);
+            localReg.setPassword(passwordEncoder.encode(password));
+            localReg.setGstCertificateUrl(gstUrl);
+            localReg.setCompanyRegistrationDocUrl(companyDocUrl);
+            localReg.setIdProofUrl(idProofUrl);
+            localReg.setStatus("PENDING");
+            localReg.setSubmittedAt(Instant.now());
+            registrationRepository.save(localReg);
+
             return ResponseEntity.ok(Map.of(
                     "success", true,
                     "message", "Registration submitted successfully. Awaiting approval.",
