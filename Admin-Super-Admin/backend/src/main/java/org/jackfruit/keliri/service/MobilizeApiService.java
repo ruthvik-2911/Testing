@@ -214,6 +214,87 @@ public class MobilizeApiService {
     }
 
     /**
+     * Fetches advertisements from Mobilize API with company-specific filtering
+     */
+    public List<Map<String, Object>> fetchAdvertisements(String companyUID, int page, int limit) {
+        String token = getAuthToken();
+        if (token == null)
+            return Collections.emptyList();
+
+        String url = apiUrl + "/advertisements?page=" + page + "&limit=" + limit;
+        if (companyUID != null && !companyUID.isBlank()) {
+            url += "&companyUID=" + companyUID;
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Object data = response.getBody().get("data");
+                if (data instanceof List) {
+                    List<Map<String, Object>> ads = (List<Map<String, Object>>) data;
+                    
+                    // Additional client-side filtering to ensure company-specific results
+                    if (companyUID != null && !companyUID.isBlank()) {
+                        return ads.stream()
+                            .filter(ad -> {
+                                Object company = ad.get("company");
+                                if (company instanceof Map) {
+                                    Map<String, Object> companyMap = (Map<String, Object>) company;
+                                    Object companyId = companyMap.get("_id");
+                                    return companyUID.equals(String.valueOf(companyId));
+                                }
+                                return companyUID.equals(String.valueOf(company));
+                            })
+                            .toList();
+                    }
+                    return ads;
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error fetching advertisements from Mobilize: " + e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("401")) {
+                cachedToken = null;
+            }
+        }
+        return Collections.emptyList();
+    }
+
+    /**
+     * Fetches dashboard counts with company-specific filtering
+     */
+    public Map<String, Object> fetchDashboardCounts(String companyUID) {
+        String token = getAuthToken();
+        if (token == null)
+            return Collections.emptyMap();
+
+        String url = apiUrl + "/user/count/dashboard";
+        if (companyUID != null && !companyUID.isBlank()) {
+            url += "?companyUID=" + companyUID;
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(token);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        try {
+            ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, entity, Map.class);
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                return (Map<String, Object>) response.getBody().get("data");
+            }
+        } catch (Exception e) {
+            System.err.println("Error fetching dashboard counts from Mobilize: " + e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("401")) {
+                cachedToken = null;
+            }
+        }
+        return Collections.emptyMap();
+    }
+
+    /**
      * Updates company status with a resilient strategy:
      * 1) Try Mobilize API update using `uid` if present
      * 2) Fallback to direct Mongo update by `_id` / `email`

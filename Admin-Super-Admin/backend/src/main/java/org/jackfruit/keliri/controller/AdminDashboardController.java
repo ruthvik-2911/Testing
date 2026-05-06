@@ -45,4 +45,34 @@ public class AdminDashboardController {
                     .body(Map.of("success", false, "message", "Internal server error: " + e.getMessage()));
         }
     }
+
+    @Autowired
+    private MobilizeApiService mobilizeApiService;
+
+    @GetMapping("/advertisements")
+    public ResponseEntity<?> getAdvertisements(
+            @RequestParam(required = false) String companyUID,
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "200") int limit) {
+        try {
+            List<Map<String, Object>> advertisements = mobilizeApiService.fetchAdvertisements(companyUID, page, limit);
+            return ResponseEntity.ok(Map.of("success", true, "data", advertisements, "count", advertisements.size()));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("success", false, "message", "Error fetching advertisements: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/dashboard-counts")
+    public ResponseEntity<?> getDashboardCounts(@RequestParam(required = false) String companyUID) {
+        try {
+            Map<String, Object> counts = mobilizeApiService.fetchDashboardCounts(companyUID);
+            return ResponseEntity.ok(Map.of("success", true, "data", counts));
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("success", false, "message", "Error fetching dashboard counts: " + e.getMessage()));
+        }
+    }
 }
