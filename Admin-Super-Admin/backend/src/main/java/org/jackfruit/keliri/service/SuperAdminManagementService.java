@@ -109,6 +109,46 @@ public class SuperAdminManagementService {
             admins.add(toAdminRecordFromReg(reg));
         }
 
+        // 3. Try finding in Mobilize DB (Unified Discovery) as fallback for missing
+        // local records
+        try {
+            List<Map> rawCompanies = mobilizeApiService.fetchAllCompaniesDirectly();
+            if (rawCompanies != null) {
+                for (Map<?, ?> rawCompany : rawCompanies) {
+                    if (rawCompany == null)
+                        continue;
+
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> company = (Map<String, Object>) rawCompany;
+
+                    Object emailObj = company.get("email");
+                    String email = emailObj != null ? String.valueOf(emailObj) : null;
+
+                    if (email == null || email.trim().isEmpty()) {
+                        Object regObj = company.get("keliriRegistration");
+                        if (regObj instanceof Map) {
+                            Object innerEmail = ((Map<?, ?>) regObj).get("emailId");
+                            email = innerEmail != null ? String.valueOf(innerEmail) : null;
+                        }
+                    }
+
+                    if (email == null || email.trim().isEmpty())
+                        continue;
+
+                    final String finalEmail = email;
+                    boolean alreadyInList = admins.stream()
+                            .anyMatch(a -> a.getEmail() != null && a.getEmail().equalsIgnoreCase(finalEmail));
+
+                    if (alreadyInList)
+                        continue;
+
+                    admins.add(mobilizeCompanyToAdminRecord(company));
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error syncing Mobilize companies in getAdmins: " + e.getMessage());
+        }
+
         return admins.stream()
                 .filter(admin -> matchesAdminFilters(admin, search, status))
                 .sorted(Comparator.comparing(SuperAdminManagementResponse.AdminRecord::getRegisteredDate).reversed())
