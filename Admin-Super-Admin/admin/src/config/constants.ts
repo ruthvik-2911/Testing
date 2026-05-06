@@ -24,7 +24,7 @@ export const ADMIN_BACKEND_URL =
  */
 export const GOOGLE_MAPS_API_KEY =
   import.meta.env.VITE_GOOGLE_MAPS_API_KEY ||
-  "AIzaSyA7zRq6dfxDa7k-25_Dh1cJqDGxVlttAv0";
+  ""; // Use empty string to disable Google Maps if not configured
 
 // ── Ad Type UIDs ──────────────────────────────────────────────────────────────
 // These are sent as `adType` in the advertisement creation payload.
@@ -103,13 +103,19 @@ export const ENDPOINTS = {
 
 export const MAPS_ENDPOINTS = {
   placesAutocomplete: (input: string) =>
-    `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_MAPS_API_KEY}`,
+    GOOGLE_MAPS_API_KEY 
+      ? `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_MAPS_API_KEY}`
+      : null,
 
   placeDetails: (placeId: string) =>
-    `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&key=${GOOGLE_MAPS_API_KEY}`,
+    GOOGLE_MAPS_API_KEY 
+      ? `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&key=${GOOGLE_MAPS_API_KEY}`
+      : null,
 
   reverseGeocode: (lat: number, lng: number) =>
-    `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`,
+    GOOGLE_MAPS_API_KEY 
+      ? `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`
+      : null,
 } as const;
 
 // ── Campaign Status ───────────────────────────────────────────────────────────

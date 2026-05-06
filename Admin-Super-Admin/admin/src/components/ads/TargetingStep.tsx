@@ -22,10 +22,39 @@ function GeoMapPreview({
   radiusKm: number
   onMapClick?: (lat: number, lng: number) => void
 }) {
-  const { isLoaded } = useJsApiLoader({
+  // Check if Google Maps API key is available
+  if (!GOOGLE_MAPS_API_KEY) {
+    return (
+      <div className="w-full aspect-video rounded-2xl bg-gray-100 dark:bg-[#1C1F26] border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center">
+        <Map className="w-12 h-12 text-gray-400 mb-2" />
+        <p className="text-sm text-gray-500 text-center">
+          Google Maps is not configured
+        </p>
+        <p className="text-xs text-gray-400 text-center mt-1">
+          Please set VITE_GOOGLE_MAPS_API_KEY in your environment
+        </p>
+      </div>
+    )
+  }
+
+  const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
   })
+
+  if (loadError) {
+    return (
+      <div className="w-full aspect-video rounded-2xl bg-gray-100 dark:bg-[#1C1F26] border border-gray-200 dark:border-gray-800 flex flex-col items-center justify-center">
+        <Map className="w-12 h-12 text-red-400 mb-2" />
+        <p className="text-sm text-red-500 text-center">
+          Google Maps failed to load
+        </p>
+        <p className="text-xs text-gray-400 text-center mt-1">
+          Please check your API key configuration
+        </p>
+      </div>
+    )
+  }
 
   const isValid = lat !== 0 || lng !== 0
   const center = isValid ? { lat, lng } : { lat: 19.0760, lng: 72.8777 } // default Mumbai
@@ -112,34 +141,50 @@ export function TargetingStep() {
   const [searching, setSearching] = React.useState(false)
   const searchDebounce = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const fetchPlaces = async (val: string) => {
+    if (val.length < 2) {
+      setSuggestions([])
+      return
+    }
+    
+    // Check if Google Maps API is available
+    if (!GOOGLE_MAPS_API_KEY) {
+      setSuggestions([])
+      return
+    }
+    
+    const url = MAPS_ENDPOINTS.placesAutocomplete(val)
+    if (!url) {
+      setSuggestions([])
+      return
+    }
+    
+    setSearching(true)
+    try {
+      // Note: direct browser fetch to Places API requires the key to have browser restrictions disabled
+      // or use a serverside proxy. For now, this hits the API directly.
+      const res = await fetch(url)
+      const json = await res.json()
+      if (json.predictions) {
+        setSuggestions(json.predictions.slice(0, 5).map((p: any) => ({
+          placeId: p.place_id,
+          description: p.description,
+        })))
+      }
+    } catch (err) {
+      console.error("Failed to fetch places:", err)
+      // Silently fail - user can still type location manually
+      setSuggestions([])
+    } finally {
+      setSearching(false)
+    }
+  }
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     setSearchQuery(val)
     if (searchDebounce.current) clearTimeout(searchDebounce.current)
-    if (!val.trim()) { setSuggestions([]); return }
-
-    searchDebounce.current = setTimeout(async () => {
-      setSearching(true)
-      try {
-        // Note: direct browser fetch to Places API requires the key to have browser restrictions disabled
-        // or use a serverside proxy. For now, this hits the API directly.
-        const url = MAPS_ENDPOINTS.placesAutocomplete(val)
-        const res = await fetch(url)
-        const json = await res.json()
-        if (json.predictions) {
-          setSuggestions(
-            json.predictions.slice(0, 5).map((p: any) => ({
-              placeId: p.place_id,
-              description: p.description,
-            }))
-          )
-        }
-      } catch {
-        // silently fail — user can still enter coords manually
-      } finally {
-        setSearching(false)
-      }
-    }, 400)
+    searchDebounce.current = setTimeout(() => fetchPlaces(val), 400)
   }
 
   const handleSuggestionSelect = async (placeId: string, description: string) => {

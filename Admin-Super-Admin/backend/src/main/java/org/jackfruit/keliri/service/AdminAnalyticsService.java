@@ -56,10 +56,10 @@ public class AdminAnalyticsService {
             // Mapping frontend internal adType to backend IDs or logic if needed. 
             // In advertisements.java, adType is a String (ID). 
             // For now matching as-is.
-            campaigns = campaigns.stream().filter(c -> c.getA() != null && adType.equalsIgnoreCase(c.getA().getAdType())).collect(Collectors.toList());
+            campaigns = campaigns.stream().filter(c -> c.getA() != null && c.getA().getAdType() != null && adType.equalsIgnoreCase(c.getA().getAdType())).collect(Collectors.toList());
         }
         if (status != null && !status.equalsIgnoreCase("All")) {
-            campaigns = campaigns.stream().filter(c -> status.equalsIgnoreCase(c.getCompaignsStatus())).collect(Collectors.toList());
+            campaigns = campaigns.stream().filter(c -> c.getCompaignsStatus() != null && status.equalsIgnoreCase(c.getCompaignsStatus())).collect(Collectors.toList());
         }
 
         List<String> campaignIds = campaigns.stream().map(ad_campaigns::getId).collect(Collectors.toList());
@@ -188,7 +188,7 @@ public class AdminAnalyticsService {
 
     private List<AdminAnalyticsResponse.BreakdownItem> buildAdBreakdown(List<hitRecord> hits, List<ad_campaigns> campaigns) {
         Map<String, String> adNames = campaigns.stream()
-                .filter(c -> c.getA() != null)
+                .filter(c -> c.getA() != null && c.getA().getTitle() != null)
                 .collect(Collectors.toMap(ad_campaigns::getId, c -> c.getA().getTitle(), (a, b) -> a));
 
         Map<String, Long> clicksByAd = hits.stream()

@@ -4,8 +4,7 @@ import { CTASelector, type CTAType } from "./CTASelector"
 import { CustomSectionsBuilder } from "./CustomSectionsBuilder"
 import { Tag, Link as LinkIcon, Map as MapIcon, Info, Loader2 } from "lucide-react"
 import { GoogleMap, useJsApiLoader, Marker } from "@react-google-maps/api"
-
-const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string
+import { GOOGLE_MAPS_API_KEY } from "../../config/constants"
 
 const mapContainerStyle = {
   width: "100%",
@@ -34,12 +33,41 @@ function MapPreview({
 }) {
   const coords = parseCoords(coordinatesRaw)
   
-  const { isLoaded } = useJsApiLoader({
+  // Check if Google Maps API key is available
+  if (!GOOGLE_MAPS_API_KEY) {
+    return (
+      <div className="relative border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden bg-gray-100 dark:bg-[#1C1F26] aspect-video flex flex-col items-center justify-center">
+        <MapIcon className="w-12 h-12 text-gray-400 mb-2" />
+        <p className="text-sm text-gray-500 text-center">
+          Google Maps is not configured
+        </p>
+        <p className="text-xs text-gray-400 text-center mt-1">
+          Please set VITE_GOOGLE_MAPS_API_KEY in your environment
+        </p>
+      </div>
+    )
+  }
+  
+  const { isLoaded, loadError } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
   })
 
   const center = coords || { lat: 19.0760, lng: 72.8777 } // default Mumbai
+
+  if (loadError) {
+    return (
+      <div className="relative border border-gray-200 dark:border-gray-800 rounded-2xl overflow-hidden bg-gray-100 dark:bg-[#1C1F26] aspect-video flex flex-col items-center justify-center">
+        <MapIcon className="w-12 h-12 text-red-400 mb-2" />
+        <p className="text-sm text-red-500 text-center">
+          Google Maps failed to load
+        </p>
+        <p className="text-xs text-gray-400 text-center mt-1">
+          Please check your API key configuration
+        </p>
+      </div>
+    )
+  }
 
   if (!isLoaded) {
     return (

@@ -321,19 +321,20 @@ export const createAd = async (data: any): Promise<Advertisement> => {
   const response = await adMobileApi.post(ENDPOINTS.adsCreate, payload);
   console.log('📦 Create Ad Response:', response.data);
   
+  // Handle different response formats
   if (!response.data.success) {
     throw new Error(response.data.message || response.data.data || "Failed to create advertisement");
   }
 
-  const result = response.data.data;
+  const result = response.data.data || response.data;
 
   return {
     id: result.uid || result._id,
-    title: result.title,
+    title: result.title || data.title,
     publishers: [],
     status: 'Draft',
-    startDate: result.startDate,
-    endDate: result.endDate,
+    startDate: result.startDate || data.startDate,
+    endDate: result.endDate || data.endDate,
     impressions: 0,
     clicks: 0,
     ctr: 0,
