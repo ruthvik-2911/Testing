@@ -58,7 +58,7 @@ export const fetchDashboardData = async (filter: string = "30", companyUID?: str
         companyUID // Include in body for POST
       }).catch(() => ({ data: {} })),
       adMobileApi.get('/v1/ad-campaigns', { params: { ...commonParams, page: 1, limit: 200 } }).catch(() => ({ data: { data: [] } })),
-      adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { params: { ...commonParams, all: 'yes' } }).catch(() => ({ data: { data: [] } })),
+      adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { params: commonParams }).catch(() => ({ data: { data: [] } })),
       adMobileApi.get('/v1/advertisements', { params: { ...commonParams, page: 1, limit: 200 } }).catch(() => ({ data: { data: [] } }))
     ]);
 
@@ -70,8 +70,14 @@ export const fetchDashboardData = async (filter: string = "30", companyUID?: str
     const companies = companyRes.data?.data || []
     const rawAds = adsRes.data?.data || []
 
-    let manualAdCounts = { active: 0, expired: 0, spend: 0, clicks: 0, total: Math.max(campaigns.length, rawAds.length) }
-    const manualPublisherCount = companies.length
+    // Since API doesn't properly filter by company, only count ads that belong to current company
+    const companySpecificAds = companyUID ? rawAds.filter(ad => 
+      ad.company && (ad.company._id === companyUID || ad.company === companyUID)
+    ) : []
+
+    let manualAdCounts = { active: 0, expired: 0, spend: 0, clicks: 0, total: companySpecificAds.length }
+    // For company-specific dashboard, publishers count should be 1 (the current company) or 0 if no company
+    const manualPublisherCount = companyUID ? 1 : 0
 
     campaigns.forEach((camp: any) => {
       const status = (camp.compaignsStatus || '').toUpperCase()
@@ -110,12 +116,12 @@ export const fetchDashboardData = async (filter: string = "30", companyUID?: str
 
     return {
       stats: {
-        totalAds: counts.totalAds || counts.totalAdvertisements || analytics.totalAds || manualAdCounts.total || 0,
-        activeAds: counts.activeAds || counts.activeCampaigns || analytics.activeCampaigns || manualAdCounts.active || 0,
-        expiredAds: counts.expiredAds || counts.expiredCampaigns || analytics.expiredCampaigns || manualAdCounts.expired || 0,
-        totalPublishers: counts.totalPublishers || counts.publishersCount || counts.totalUsers || manualPublisherCount || 0,
-        totalSpend: counts.totalSpend || counts.revenue || analytics.totalRevenue || manualAdCounts.spend || 0,
-        totalClicks: counts.totalClicks || analytics.totalClicks || manualAdCounts.clicks || 0,
+        totalAds: manualAdCounts.total || 0,
+        activeAds: manualAdCounts.active || 0,
+        expiredAds: manualAdCounts.expired || 0,
+        totalPublishers: manualPublisherCount || 0,
+        totalSpend: manualAdCounts.spend || 0,
+        totalClicks: manualAdCounts.clicks || 0,
         trends: {
           totalAds: 12,
           activeAds: 8,

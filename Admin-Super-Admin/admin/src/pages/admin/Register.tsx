@@ -462,7 +462,7 @@ export default function AdminRegister() {
                       >
                         <option value="">Select Type</option>
                         <option value="PRODUCTS_SERVICES">Products & Services</option>
-                        <option value="PUBLISHER">Publisher</option>
+                        <option value="PRODUCTS_SERVICES">Publisher</option>
                       </select>
                     </div>
                     {errors.companyType && <p className={errorClass}>{errors.companyType.message as string}</p>}
