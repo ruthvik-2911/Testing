@@ -7,6 +7,53 @@ interface AnalyticsInsightsProps {
   data: AnalyticsData
 }
 
+const generateOptimizationRecommendation = (data: AnalyticsData): string => {
+  const { kpis, breakdowns } = data
+  
+  // CTR-based recommendations
+  if (kpis.ctr < 2) {
+    return "Optimize ad creatives and targeting to improve CTR below 2%."
+  } else if (kpis.ctr > 10) {
+    return "Scale successful campaigns with CTR above 10% for maximum impact."
+  }
+  
+  // Spend efficiency recommendations
+  if (kpis.spend > 0 && kpis.clicks > 0) {
+    const costPerClick = kpis.spend / kpis.clicks
+    if (costPerClick > 50) {
+      return "Reduce cost per click by refining targeting and improving ad relevance."
+    } else if (costPerClick < 10) {
+      return "Increase budget allocation to high-performing campaigns with low CPC."
+    }
+  }
+  
+  // Top performer recommendations
+  if (breakdowns.byAd.length > 0) {
+    const topAd = breakdowns.byAd[0]
+    if (topAd.value > breakdowns.byAd.slice(1).reduce((sum, ad) => sum + ad.value, 0)) {
+      return `Double down on "${topAd.name}" - it's outperforming all other ads combined.`
+    }
+  }
+  
+  // Geographic recommendations
+  if (breakdowns.byLocation.length > 0) {
+    const topLocation = breakdowns.byLocation[0]
+    const totalValue = breakdowns.byLocation.reduce((sum, loc) => sum + loc.value, 0)
+    if (topLocation.value / totalValue > 0.6) {
+      return `Focus on ${topLocation.name} region - it drives 60%+ of your engagement.`
+    }
+  }
+  
+  // Default recommendations
+  if (kpis.activeCampaigns === 0) {
+    return "Launch new campaigns to start generating engagement and insights."
+  } else if (kpis.impressions === 0) {
+    return "Increase reach and frequency to generate impressions and build brand awareness."
+  }
+  
+  return "Continue monitoring performance and optimize based on real-time data insights."
+}
+
 export function AnalyticsInsights({ data }: AnalyticsInsightsProps) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -105,7 +152,9 @@ export function AnalyticsInsights({ data }: AnalyticsInsightsProps) {
 
            <div className="mt-12 p-6 bg-brand-500/20 border border-brand-500/30 rounded-3xl">
               <p className="text-[10px] font-black uppercase tracking-widest text-brand-400 mb-2">Primary Optimization</p>
-              <p className="text-sm font-bold text-white">Focus on Video inventory in Mumbai for 2.4x higher ROI.</p>
+              <p className="text-sm font-bold text-white">
+                {generateOptimizationRecommendation(data)}
+              </p>
            </div>
         </div>
       </div>

@@ -100,12 +100,8 @@ public class AdminAnalyticsService {
         kpis.setSpend(spend);
         kpis.setActiveCampaigns(activeCampaigns);
         
-        // Trends Comparison (Current vs Previous period) - Using static positive trends for visual UI polish as requested
-        AdminAnalyticsResponse.ComparisonTrends comp = new AdminAnalyticsResponse.ComparisonTrends();
-        comp.setImpressions(12.5);
-        comp.setClicks(8.2);
-        comp.setCtr(2.1);
-        comp.setSpend(-5.0);
+        // Trends Comparison (Current vs Previous period) - Calculate dynamic trends
+        AdminAnalyticsResponse.ComparisonTrends comp = calculateTrends(hits, campaigns, startDate, endDate);
         kpis.setTrends(comp);
         response.setKpis(kpis);
 
@@ -300,12 +296,75 @@ public class AdminAnalyticsService {
         if (hits.isEmpty()) return Arrays.asList("No activity detected in the selected period.");
         
         long clicks = hits.stream().filter(h -> "AD_CLICK".equalsIgnoreCase(h.getEventType())).count();
-        double ctr = hits.size() > 0 ? (double) clicks / hits.size() * 100 : 0;
+        long impressions = hits.stream().filter(h -> "AD_VIEW".equalsIgnoreCase(h.getEventType()) || "PAGE_HIT".equalsIgnoreCase(h.getEventType())).count();
+        double ctr = impressions > 0 ? (double) clicks / impressions * 100 : 0;
 
         List<String> insights = new ArrayList<>();
-        if (ctr > 10) insights.add("Top performing campaigns are showing exceptional CTR above 10%.");
-        insights.add("Engagement peak detected during evening hours (6 PM - 9 PM) based on timestamp analysis.");
-        insights.add("Recommended: Increase budget for Mumbai locations to capture higher density of target audience.");
+        
+        // CTR-based insights
+        if (ctr > 10) {
+            insights.add("Top performing campaigns are showing exceptional CTR above 10%.");
+        } else if (ctr > 5) {
+            insights.add("Campaign performance is strong with CTR above 5%.");
+        } else if (ctr > 2) {
+            insights.add("CTR is moderate - consider optimizing ad creatives for better engagement.");
+        } else {
+            insights.add("CTR is below 2% - review ad targeting and creative elements.");
+        }
+        
+        // Time-based insights
+        Map<Integer, Long> hourlyDistribution = hits.stream()
+            .collect(Collectors.groupingBy(
+                h -> h.getTimestamp().toInstant().atZone(ZONE_ID).getHour(),
+                Collectors.counting()
+            ));
+        
+        if (!hourlyDistribution.isEmpty()) {
+            int peakHour = hourlyDistribution.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse(12);
+            
+            if (peakHour >= 18 && peakHour <= 21) {
+                insights.add("Engagement peak detected during evening hours (" + peakHour + ":00 - " + (peakHour + 1) + ":00).");
+            } else if (peakHour >= 12 && peakHour <= 14) {
+                insights.add("Peak activity observed during lunch hours (" + peakHour + ":00 - " + (peakHour + 1) + ":00).");
+            } else {
+                insights.add("Highest engagement recorded at " + peakHour + ":00 - consider scheduling campaigns around this time.");
+            }
+        }
+        
+        // Location-based insights (if we have location data)
+        long hitsWithLocation = hits.stream()
+            .filter(h -> h.getLatitude() != null && h.getLongitude() != null)
+            .count();
+        
+        if (hitsWithLocation > 0) {
+            Map<String, Long> locationHits = new HashMap<>();
+            for (hitRecord h : hits) {
+                if (h.getLatitude() != null) {
+                    double lat = Double.parseDouble(h.getLatitude());
+                    String region = lat > 20 ? "North" : lat > 15 ? "Central" : lat > 10 ? "South" : "Other";
+                    locationHits.merge(region, 1L, Long::sum);
+                }
+            }
+            
+            String topRegion = locationHits.entrySet().stream()
+                .max(Map.Entry.comparingByValue())
+                .map(Map.Entry::getKey)
+                .orElse("Unknown");
+            
+            insights.add("Highest engagement from " + topRegion + " regions - consider increasing ad spend in these areas.");
+        }
+        
+        // Volume-based insights
+        if (clicks > 1000) {
+            insights.add("High click volume detected - ensure sufficient budget to maintain campaign momentum.");
+        } else if (clicks > 500) {
+            insights.add("Steady click performance - maintain current campaign settings.");
+        } else if (clicks > 100) {
+            insights.add("Moderate click activity - consider expanding reach or adjusting targeting.");
+        }
         
         return insights;
     }
@@ -325,6 +384,72 @@ public class AdminAnalyticsService {
                 * Math.sin(dLon / 2) * Math.sin(dLon / 2);
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return earthRadiusKm * c;
+    }
+
+    private AdminAnalyticsResponse.ComparisonTrends calculateTrends(List<hitRecord> hits, List<ad_campaigns> campaigns, LocalDate startDate, LocalDate endDate) {
+        AdminAnalyticsResponse.ComparisonTrends trends = new AdminAnalyticsResponse.ComparisonTrends();
+        
+        // Calculate previous period (same duration, before current period)
+        long daysBetween = ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        LocalDate prevStart = startDate.minusDays(daysBetween);
+        LocalDate prevEnd = startDate.minusDays(1);
+        
+        // Get data for previous period
+        Date prevStartDt = Date.from(prevStart.atStartOfDay(ZONE_ID).toInstant());
+        Date prevEndDt = Date.from(prevEnd.plusDays(1).atStartOfDay(ZONE_ID).toInstant());
+        
+        List<String> campaignIds = campaigns.stream().map(ad_campaigns::getId).collect(Collectors.toList());
+        List<hitRecord> prevHits = new ArrayList<>();
+        if (!campaignIds.isEmpty()) {
+            prevHits = hitRecordRepository.findByCampaignIdInAndTimestampBetween(campaignIds, prevStartDt, prevEndDt);
+        }
+        
+        // Current period metrics
+        long currentImpressions = hits.stream().filter(h -> "AD_VIEW".equalsIgnoreCase(h.getEventType()) || "PAGE_HIT".equalsIgnoreCase(h.getEventType())).count();
+        long currentClicks = hits.stream().filter(h -> "AD_CLICK".equalsIgnoreCase(h.getEventType())).count();
+        double currentCtr = currentImpressions > 0 ? (double) currentClicks / currentImpressions * 100 : 0;
+        long currentSpend = calculateSpendForAnalytics(hits, campaigns.size());
+        
+        // Previous period metrics
+        long prevImpressions = prevHits.stream().filter(h -> "AD_VIEW".equalsIgnoreCase(h.getEventType()) || "PAGE_HIT".equalsIgnoreCase(h.getEventType())).count();
+        long prevClicks = prevHits.stream().filter(h -> "AD_CLICK".equalsIgnoreCase(h.getEventType())).count();
+        double prevCtr = prevImpressions > 0 ? (double) prevClicks / prevImpressions * 100 : 0;
+        long prevSpend = calculateSpendForAnalytics(prevHits, campaigns.size());
+        
+        // Calculate percentage changes
+        if (prevImpressions > 0) {
+            trends.setImpressions(round(((double) (currentImpressions - prevImpressions) / prevImpressions) * 100));
+        } else if (currentImpressions > 0) {
+            trends.setImpressions(100.0); // First period with data
+        } else {
+            trends.setImpressions(0.0);
+        }
+        
+        if (prevClicks > 0) {
+            trends.setClicks(round(((double) (currentClicks - prevClicks) / prevClicks) * 100));
+        } else if (currentClicks > 0) {
+            trends.setClicks(100.0); // First period with data
+        } else {
+            trends.setClicks(0.0);
+        }
+        
+        if (prevCtr > 0) {
+            trends.setCtr(round(((currentCtr - prevCtr) / prevCtr) * 100));
+        } else if (currentCtr > 0) {
+            trends.setCtr(100.0); // First period with data
+        } else {
+            trends.setCtr(0.0);
+        }
+        
+        if (prevSpend > 0) {
+            trends.setSpend(round(((double) (currentSpend - prevSpend) / prevSpend) * 100));
+        } else if (currentSpend > 0) {
+            trends.setSpend(100.0); // First period with data
+        } else {
+            trends.setSpend(0.0);
+        }
+        
+        return trends;
     }
 
     private double round(double val) {

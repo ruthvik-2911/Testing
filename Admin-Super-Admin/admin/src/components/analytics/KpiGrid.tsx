@@ -43,7 +43,7 @@ export function KpiGrid({ data }: KpiGridProps) {
     },
     { 
       label: "Active Campaigns", 
-      value: data.activeCampaigns, 
+      value: String(data.activeCampaigns), 
       trend: 0, 
       icon: Zap, 
       color: "text-purple-500", 

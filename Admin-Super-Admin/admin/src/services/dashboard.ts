@@ -71,9 +71,15 @@ export const fetchDashboardData = async (filter: string = "30", companyUID?: str
     const rawAds = adsRes.data?.data || []
 
     // Since API doesn't properly filter by company, only count ads that belong to current company
+    console.log('Dashboard Debug - companyUID:', companyUID);
+    console.log('Dashboard Debug - rawAds count:', rawAds.length);
+    console.log('Dashboard Debug - first ad:', rawAds[0]);
+    
     const companySpecificAds = companyUID ? rawAds.filter(ad => 
-      ad.company && (ad.company._id === companyUID || ad.company === companyUID)
-    ) : []
+      ad.company === companyUID || ad.company?._id === companyUID || ad.companyId === companyUID
+    ) : rawAds
+
+    console.log('Dashboard Debug - companySpecificAds count:', companySpecificAds.length);
 
     let manualAdCounts = { active: 0, expired: 0, spend: 0, clicks: 0, total: companySpecificAds.length }
     // For company-specific dashboard, publishers count should be 1 (the current company) or 0 if no company
