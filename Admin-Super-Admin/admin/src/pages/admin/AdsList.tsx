@@ -88,6 +88,7 @@ export default function AdsList() {
       setPublishersList(response.uniquePublishers)
     } catch (error) {
       toast.error("Failed to load advertisements")
+      setData([]) // Clear data on error
     } finally {
       setLoading(false)
     }

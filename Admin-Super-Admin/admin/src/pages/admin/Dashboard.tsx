@@ -33,6 +33,10 @@ export default function Dashboard() {
         if (userStr) {
           const user = JSON.parse(userStr);
           companyUID = user.companyUID || user.companyId || user.uid;
+          console.log('Dashboard Component Debug - user data:', user);
+          console.log('Dashboard Component Debug - extracted companyUID:', companyUID);
+        } else {
+          console.log('Dashboard Component Debug - no user data found in localStorage');
         }
 
         const result = await fetchDashboardData(filter, companyUID)

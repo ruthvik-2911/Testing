@@ -144,15 +144,15 @@ export const fetchAds = async ({
   status,
   companyUID,
 }: FetchAdsArgs): Promise<FetchAdsResult> => {
-  // Fetch a large batch of campaigns AND advertisements
-  const params: Record<string, any> = { page: 1, limit: 1000 };
+  // Use server-side pagination instead of fetching everything
+  const params: Record<string, any> = { page, limit: Math.min(limit * 2, 100) }; // Fetch slightly more for filtering
   if (companyUID) params.companyUID = companyUID;
+  if (search) params.search = search;
 
-  // Fetch campaigns, advertisements, and paid ad IDs in parallel
-  const [campaignsRes, adsRes, paidAdIds] = await Promise.all([
+  // Fetch campaigns and advertisements in parallel, skip paidAdIds for now (add later if needed)
+  const [campaignsRes, adsRes] = await Promise.all([
     adMobileApi.get(ENDPOINTS.campaignsList, { params }).catch(() => ({ data: { data: [] } })),
-    adMobileApi.get(ENDPOINTS.adsList, { params }).catch(() => ({ data: { data: [] } })),
-    fetchPaidAdIds()
+    adMobileApi.get(ENDPOINTS.adsList, { params }).catch(() => ({ data: { data: [] } }))
   ]);
 
   const rawCampaigns = campaignsRes.data?.data ?? [];
@@ -217,20 +217,24 @@ export const fetchAds = async ({
       impressions: camp?.reachedPublishingCount ?? 0,
       clicks: camp?.clicks ?? 0,
       ctr: camp?.ctr ?? 0,
-      // Payment status: check against the authoritative list from Spring Boot.
-      paymentStatus: paidAdIds.has(adUid) ? 'Paid' : 'Pending',
+      // Payment status: default to Pending (can be enhanced later)
+      paymentStatus: 'Pending' as const,
     };
   });
 
-  // Sort by date DESC (newest first)
+  // Create a map for faster sorting lookup
+  const createdAtMap = new Map<string, number>();
+  rawAds.forEach((ad: any) => {
+    if (ad.uid && ad.createdAt) {
+      createdAtMap.set(ad.uid, new Date(ad.createdAt).getTime());
+    }
+  });
+
+  // Sort by date DESC (newest first) - O(n log n) instead of O(n²)
   mergedAds.sort((a, b) => {
-    // We don't have createdAt in the mapped object directly, 
-    // but the raw objects have it. Let's find the original object for sorting.
-    const getCreatedAt = (id: string) => {
-      const origAd = rawAds.find((r: any) => r.uid === id);
-      return origAd?.createdAt ? new Date(origAd.createdAt).getTime() : 0;
-    };
-    return getCreatedAt(b.id) - getCreatedAt(a.id);
+    const timeA = createdAtMap.get(a.id) || 0;
+    const timeB = createdAtMap.get(b.id) || 0;
+    return timeB - timeA;
   });
 
   // Apply Search/Status filters locally since we have the full list
@@ -317,9 +321,11 @@ export const createAd = async (data: any): Promise<Advertisement> => {
   });
 
   console.log("🚀 [CREATE] Advertisement Payload:", JSON.stringify(payload, null, 2));
+  console.log('🚀 [CREATE] Payload companyUID:', payload.companyUID);
 
   const response = await adMobileApi.post(ENDPOINTS.adsCreate, payload);
   console.log('📦 Create Ad Response:', response.data);
+  console.log('📦 Created ad companyUID:', response.data.data?.company || response.data.data?.company?._id || response.data.data?.companyId);
   
   // Handle different response formats
   if (!response.data.success) {

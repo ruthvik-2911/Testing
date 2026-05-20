@@ -9,10 +9,19 @@ import { Button } from "../ui/Button"
 interface BannerUploaderProps {
   files: File[]
   onFilesChange: (files: File[]) => void
+  onThumbnailChange?: (index: number) => void
+  thumbnailIndex?: number
   error?: string
 }
 
-function ImageThumbnail({ file, index, onRemove, onPreview }: { file: File; index: number; onRemove: () => void; onPreview: (url: string) => void }) {
+function ImageThumbnail({ file, index, onRemove, onPreview, isThumbnail, onSetThumbnail }: { 
+  file: File; 
+  index: number; 
+  onRemove: () => void; 
+  onPreview: (url: string) => void;
+  isThumbnail?: boolean;
+  onSetThumbnail?: () => void;
+}) {
   const [url, setUrl] = React.useState<string>("");
 
   React.useEffect(() => {
@@ -27,8 +36,33 @@ function ImageThumbnail({ file, index, onRemove, onPreview }: { file: File; inde
     <div className="relative group rounded-xl overflow-hidden bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm min-h-[160px] flex items-center justify-center">
       <img src={url} alt={`Banner ${index + 1}`} className="w-full h-full object-contain max-h-[160px]" />
       
+      {/* Thumbnail Badge - Top Left */}
+      {isThumbnail && (
+        <div className="absolute top-2 left-2 bg-green-500 text-[11px] text-white px-2.5 py-0.5 rounded-full font-bold shadow-md z-10 flex items-center gap-1">
+          <div className="w-2 h-2 bg-white rounded-full" />
+          Thumbnail
+        </div>
+      )}
+      
+      {/* Number Badge - Top Left (if not thumbnail) */}
+      {!isThumbnail && (
+        <div className="absolute top-2 left-2 bg-brand-500 text-[11px] text-white px-2.5 py-0.5 rounded-full font-bold shadow-md z-10">
+          {index + 1}
+        </div>
+      )}
+      
       {/* Actions Container - Top Right */}
       <div className="absolute top-2 right-2 flex items-center gap-2 z-10">
+        {!isThumbnail && onSetThumbnail && (
+          <button
+            type="button"
+            onClick={onSetThumbnail}
+            className="w-7 h-7 bg-green-500 hover:bg-green-600 text-white rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110"
+            title="Set as Thumbnail"
+          >
+            <div className="w-3 h-3 bg-white rounded-full" />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => onPreview(url)}
@@ -47,18 +81,13 @@ function ImageThumbnail({ file, index, onRemove, onPreview }: { file: File; inde
         </button>
       </div>
 
-      {/* Number Badge - Top Left */}
-      <div className="absolute top-2 left-2 bg-brand-500 text-[11px] text-white px-2.5 py-0.5 rounded-full font-bold shadow-md z-10">
-        {index + 1}
-      </div>
-
       {/* Hover Overlay */}
       <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
     </div>
   );
 }
 
-export function BannerUploader({ files, onFilesChange, error }: BannerUploaderProps) {
+export function BannerUploader({ files, onFilesChange, onThumbnailChange, thumbnailIndex = 0, error }: BannerUploaderProps) {
   const [dragActive, setDragActive] = React.useState(false)
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null)
   const [previewImage, setPreviewImage] = React.useState<string | null>(null)
@@ -218,6 +247,8 @@ export function BannerUploader({ files, onFilesChange, error }: BannerUploaderPr
               index={i} 
               onRemove={() => removeFile(i)}
               onPreview={(url) => setPreviewImage(url)}
+              isThumbnail={i === thumbnailIndex}
+              onSetThumbnail={() => onThumbnailChange?.(i)}
             />
           ))}
         </div>

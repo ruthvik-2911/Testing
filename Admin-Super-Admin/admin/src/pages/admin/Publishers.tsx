@@ -27,15 +27,7 @@ export default function Publishers() {
   const loadData = React.useCallback(async () => {
     setLoading(true)
     try {
-      // Get company UID from session
-      let companyUID = undefined;
-      const userStr = localStorage.getItem('admin_user');
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        companyUID = user.companyUID || user.companyId || user.uid;
-      }
-
-      const response = await fetchPublishers({ page, limit, search: searchTerm, status: statusFilter, companyUID })
+      const response = await fetchPublishers({ page, limit, search: searchTerm, status: statusFilter })
       setData(response.data)
       setTotalItems(response.totalItems)
     } catch (error) {

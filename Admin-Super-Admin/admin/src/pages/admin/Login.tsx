@@ -45,26 +45,72 @@ export default function AdminLogin() {
 
           // Enrich the user object with companyUID from Ad Mobile if missing
           let userObj = result.user || {};
+          console.log('🔍 Login Debug - Original user object:', userObj);
+          console.log('🔍 Login Debug - Has companyUID:', !!userObj.companyUID);
+          
           if (!userObj.companyUID) {
             try {
+              console.log('🔍 Login Debug - Fetching companies from EC2...');
               const companyRes = await adMobileApi.get('/v1/company/PRODUCTS_SERVICES', {
                 params: { all: 'yes' }
               });
               const allCompanies: any[] = companyRes.data?.data || [];
-              const matched = allCompanies.find(
+              console.log('🔍 Login Debug - EC2 companies found:', allCompanies.length);
+              console.log('🔍 Login Debug - EC2 companies:', allCompanies.map(c => ({ name: c.name, email: c.email, uid: c.uid })));
+              
+              // Try multiple matching strategies
+              let matched = allCompanies.find(
                 (c: any) => 
                   c?.email?.toLowerCase() === data.email?.toLowerCase() ||
                   (userObj.company && c?.name?.toLowerCase() === userObj.company?.toLowerCase())
               );
+              
+              // If no match found, try partial matching on company name
+              if (!matched && userObj.company) {
+                const adminCompanyLower = userObj.company.toLowerCase();
+                matched = allCompanies.find((c: any) => 
+                  c?.name?.toLowerCase().includes(adminCompanyLower) ||
+                  adminCompanyLower.includes(c?.name?.toLowerCase())
+                );
+              }
+              
+              // If still no match, try matching by admin name with company name
+              if (!matched && userObj.name) {
+                const adminNameLower = userObj.name.toLowerCase();
+                matched = allCompanies.find((c: any) => 
+                  c?.name?.toLowerCase().includes(adminNameLower) ||
+                  adminNameLower.includes(c?.name?.toLowerCase())
+                );
+              }
+              
+              // Last resort: pick the first company if there's only one
+              if (!matched && allCompanies.length === 1) {
+                matched = allCompanies[0];
+                console.log('🔍 Login Debug - Using single available company as fallback');
+              }
+              
+              // No special mapping - let admin@erp.gmail create their own ads with proper companyUID
+              
+              console.log('🔍 Login Debug - Matching criteria:', {
+                adminEmail: data.email?.toLowerCase(),
+                adminCompany: userObj.company?.toLowerCase(),
+                foundMatch: !!matched
+              });
+              
               if (matched?.uid) {
                 userObj = { ...userObj, companyUID: matched.uid };
                 console.log('✅ companyUID resolved from Ad Mobile:', matched.uid);
+                console.log('🔍 Login Debug - Matched company:', { name: matched.name, email: matched.email, uid: matched.uid });
               } else {
                 console.warn('⚠️ No matching company found in Ad Mobile for:', data.email);
+                console.log('🔍 Login Debug - Available company emails:', allCompanies.map(c => c.email));
+                console.log('🔍 Login Debug - Available company names:', allCompanies.map(c => c.name));
               }
             } catch (e) {
               console.warn('Could not look up companyUID from Ad Mobile:', e);
             }
+          } else {
+            console.log('🔍 Login Debug - Using existing companyUID:', userObj.companyUID);
           }
 
           localStorage.setItem('admin_user', JSON.stringify(userObj));

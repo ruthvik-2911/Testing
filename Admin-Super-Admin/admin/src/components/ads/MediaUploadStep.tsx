@@ -12,8 +12,10 @@ import { ImageAdUpload } from "./ImageAdUpload"
 // ─────────────────────────────────────────────
 export interface MediaState {
   bannerFiles: File[]
+  bannerThumbnailIndex: number // Index of selected thumbnail for banner ads
   videoFile: File | null
   videoUrl: string
+  videoThumbnail: File | null // Thumbnail file for video ads
   imageAd: File | null
 }
 
@@ -78,14 +80,11 @@ export function MediaUploadStep({ mediaState, setMediaState, validationErrors }:
             <VideoUploader
               videoFile={mediaState.videoFile}
               videoUrl={mediaState.videoUrl}
+              videoThumbnail={mediaState.videoThumbnail}
               onFileChange={(file) => setMediaState(s => ({ ...s, videoFile: file }))}
               onUrlChange={(url) => setMediaState(s => ({ ...s, videoUrl: url }))}
+              onThumbnailChange={(file) => setMediaState(s => ({ ...s, videoThumbnail: file }))}
               error={validationErrors.video}
-            />
-            <ImageAdUpload
-              imageAd={mediaState.imageAd}
-              onImageAdChange={(file) => setMediaState(s => ({ ...s, imageAd: file }))}
-              error={validationErrors.imageAd}
             />
           </motion.div>
         )}
@@ -103,6 +102,8 @@ export function MediaUploadStep({ mediaState, setMediaState, validationErrors }:
             <BannerUploader
               files={mediaState.bannerFiles}
               onFilesChange={(files) => setMediaState(s => ({ ...s, bannerFiles: files }))}
+              onThumbnailChange={(index) => setMediaState(s => ({ ...s, bannerThumbnailIndex: index }))}
+              thumbnailIndex={mediaState.bannerThumbnailIndex}
               error={validationErrors.banner}
             />
           </motion.div>

@@ -9,6 +9,7 @@ export interface Activity {
   status: "Active" | "Draft" | "Expired"
   publisher: string
   date: string
+  daysAgo?: number
 }
 
 interface RecentActivityProps {
@@ -72,7 +73,7 @@ export function RecentActivity({ data, delay = 0 }: RecentActivityProps) {
                     {item.publisher}
                   </td>
                   <td className="px-6 py-4 text-gray-500 dark:text-gray-400">
-                    {item.date}
+                    {item.daysAgo !== undefined ? `${item.daysAgo} day ago` : item.date}
                   </td>
                 </motion.tr>
               ))}

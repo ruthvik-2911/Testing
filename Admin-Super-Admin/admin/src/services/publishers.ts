@@ -49,7 +49,6 @@ export interface FetchPublishersArgs {
   limit: number
   search?: string
   status?: string
-  companyUID?: string
 }
 
 export interface FetchPublishersResult {
@@ -83,33 +82,25 @@ export const fetchPublishers = async ({
   limit,
   search,
   status,
-  companyUID,
 }: FetchPublishersArgs): Promise<FetchPublishersResult> => {
   try {
-    const response = await adMobileApi.get('/v1/company/PRODUCTS_SERVICES', { 
-      params: { all: 'yes', companyUID } 
-    })
-    const rawData = response.data?.data || []
+    const response = await api.get('/api/admin/publishers')
+    const rawData = response.data?.publishers || []
 
-    // Map the payload matching the Mobile Backend's signature
+    // Map the payload from Admin Backend
     let publishers: Publisher[] = rawData.map((p: any) => ({
-      id: p.uid || p.id,
+      id: p.id,
       name: p.name || 'Unknown',
       contactPerson: p.contactPerson || 'N/A',
       location: p.location || 'Unknown',
-      status: p.status === 'INACTIVE' ? 'Inactive' : 'Active', // Fallback to Active
+      status: p.status === 'INACTIVE' ? 'Inactive' : 'Active',
       lastActive: p.createdAt
         ? new Date(p.createdAt).toLocaleDateString('en-IN')
         : new Date().toLocaleDateString('en-IN'),
-      mobile: p.mobile || p.phone || '',
+      mobile: p.mobile || '',
       email: p.email || '',
-      address: p.address || p.bio || '',
+      address: p.address || '',
     }))
-
-    // Frontend Fallback Filter: ensure an admin only sees their company in the list
-    if (companyUID) {
-      publishers = publishers.filter((p) => p.id === companyUID)
-    }
 
     if (search) {
       const s = search.toLowerCase()
@@ -198,17 +189,39 @@ export const createPublisher = async (data: any): Promise<Publisher> => {
     console.warn("User credential creation failed. Company profile still exists.", error)
   }
 
+  // 3. Save publisher to admin backend database
+  const adminPayload = {
+    name: data.name,
+    contactPerson: data.contactPerson || data.name,
+    mobile: data.mobile,
+    email: data.email,
+    address: data.address || '',
+    location: data.location || data.address || '',
+  }
+
+  let adminPublisherResponse
+  try {
+    adminPublisherResponse = await api.post('/api/admin/publishers', adminPayload)
+  } catch (error) {
+    console.error("Failed to save publisher to admin backend:", error)
+    throw error
+  }
+
+  const adminPublisher = adminPublisherResponse.data?.publisher
+
   // Return mapped object so UI table updates correctly immediately
   return {
-    id: createdCompany.uid || createdCompany._id || Date.now().toString(),
-    name: createdCompany.name || data.name,
-    contactPerson: data.contactPerson || data.name,
-    location: data.address || 'Unknown',
-    status: 'Active',
-    lastActive: new Date().toLocaleDateString('en-IN'),
-    mobile: createdCompany.phoneNumber?.dialNumber || data.mobile,
-    email: createdCompany.email || data.email,
-    address: data.address,
+    id: adminPublisher?.id || createdCompany.uid || createdCompany._id || Date.now().toString(),
+    name: adminPublisher?.name || createdCompany.name || data.name,
+    contactPerson: adminPublisher?.contactPerson || data.contactPerson || data.name,
+    location: adminPublisher?.location || data.address || 'Unknown',
+    status: adminPublisher?.status === 'INACTIVE' ? 'Inactive' : 'Active',
+    lastActive: adminPublisher?.createdAt
+      ? new Date(adminPublisher.createdAt).toLocaleDateString('en-IN')
+      : new Date().toLocaleDateString('en-IN'),
+    mobile: adminPublisher?.mobile || createdCompany.phoneNumber?.dialNumber || data.mobile,
+    email: adminPublisher?.email || createdCompany.email || data.email,
+    address: adminPublisher?.address || data.address,
   }
 }
 

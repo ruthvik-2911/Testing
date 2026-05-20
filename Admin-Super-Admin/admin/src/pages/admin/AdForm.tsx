@@ -28,8 +28,10 @@ export default function AdForm() {
 
   const [mediaState, setMediaState] = React.useState<MediaState>({
     bannerFiles: [],
+    bannerThumbnailIndex: 0, // Default to first image as thumbnail
     videoFile: null,
     videoUrl: "",
+    videoThumbnail: null,
     imageAd: null,
   })
 
@@ -70,7 +72,7 @@ export default function AdForm() {
 
   React.useEffect(() => {
     if (currentStep < 1) {
-      setMediaState({ bannerFiles: [], videoFile: null, videoUrl: "", imageAd: null })
+      setMediaState({ bannerFiles: [], bannerThumbnailIndex: 0, videoFile: null, videoUrl: "", videoThumbnail: null, imageAd: null })
       setMediaErrors({})
     }
   }, [adType])
@@ -228,6 +230,9 @@ export default function AdForm() {
         toast.error('Session expired or company not found. Please log out and log back in.', { id: uploadToast });
         return;
       }
+
+      console.log('AdForm Debug - extractedCompanyUID:', extractedCompanyUID);
+      console.log('AdForm Debug - creating ad with companyUID:', extractedCompanyUID);
 
       const payload = {
         title: data.title,
